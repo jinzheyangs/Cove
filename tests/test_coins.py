@@ -1,5 +1,4 @@
 import asyncio
-from uuid import uuid4
 
 import pytest
 
@@ -8,36 +7,8 @@ from app.modules.coins import repository as repo
 from app.modules.coins import service as coin_service
 from app.modules.couples.models import Couple
 from app.modules.users.models import User
-
-
-async def _seed_couple(session) -> tuple[User, User, Couple]:
-    a = User(phone="13800000001", password_hash="x", nickname="A")
-    b = User(phone="13800000002", password_hash="x", nickname="B")
-    session.add_all([a, b])
-    await session.flush()
-    couple = Couple(user1_id=a.id, user2_id=b.id, status="active")
-    session.add(couple)
-    await session.commit()
-    return a, b, couple
-
-
-async def _fund(session, couple: Couple, user: User, amount: int) -> None:
-    """测试用：模拟系统发行，给用户充值。"""
-    await repo.ensure_account(session, user.id)
-    account = await repo.lock_account(session, user.id)
-    assert account is not None
-    account.balance += amount
-    await repo.add_transaction(
-        session,
-        couple_id=couple.id,
-        type="reward",
-        from_user_id=None,
-        to_user_id=user.id,
-        actor_id=user.id,
-        amount=amount,
-        idempotency_key=f"seed-{uuid4().hex}",
-    )
-    await session.commit()
+from tests.helpers import fund_user as _fund
+from tests.helpers import seed_couple as _seed_couple
 
 
 async def test_gift_mints_coins_to_partner(session):

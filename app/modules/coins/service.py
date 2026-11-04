@@ -1,6 +1,8 @@
 """业务层：金币规则与事务边界。
 
 模型约定：赠与 = 系统发行（from_user_id 为 NULL），消费 = 销毁（to_user_id 为 NULL）。
+
+`*_locked` 系列不提交事务，供其他模块把「扣币 + 业务写入」放进同一个事务。
 """
 
 from uuid import uuid4
@@ -26,6 +28,83 @@ async def list_transactions(
     return await repo.list_transactions(session, user_id, limit, offset)
 
 
+async def mint_locked(
+    session: AsyncSession,
+    *,
+    couple_id: int,
+    actor_id: int,
+    recipient_id: int,
+    amount: int,
+    tx_type: str = "gift",
+    ref_type: str | None = None,
+    ref_id: int | None = None,
+    remark: str | None = None,
+    idempotency_key: str | None = None,
+) -> CoinTransaction:
+    """给 recipient 发行金币。不提交事务。"""
+    if amount <= 0:
+        raise AppError("金币数量不合法", code=4002, status_code=400)
+
+    await repo.ensure_account(session, recipient_id)
+    account = await repo.lock_account(session, recipient_id)
+    if account is None:
+        raise AppError("金币账户异常", code=4003, status_code=500)
+    account.balance += amount
+
+    return await repo.add_transaction(
+        session,
+        couple_id=couple_id,
+        type=tx_type,
+        from_user_id=None,
+        to_user_id=recipient_id,
+        actor_id=actor_id,
+        amount=amount,
+        ref_type=ref_type,
+        ref_id=ref_id,
+        idempotency_key=idempotency_key or uuid4().hex,
+        remark=remark,
+    )
+
+
+async def spend_locked(
+    session: AsyncSession,
+    *,
+    couple_id: int,
+    spender_id: int,
+    amount: int,
+    ref_type: str | None = None,
+    ref_id: int | None = None,
+    remark: str | None = None,
+    idempotency_key: str | None = None,
+) -> CoinTransaction:
+    """扣减并销毁金币。不提交事务；余额不足时抛错。"""
+    if amount <= 0:
+        raise AppError("金币数量不合法", code=4002, status_code=400)
+
+    await repo.ensure_account(session, spender_id)
+    account = await repo.lock_account(session, spender_id)
+    if account is None:
+        raise AppError("金币账户异常", code=4003, status_code=500)
+    if account.balance < amount:
+        raise AppError("金币不足", code=4001, status_code=409)
+
+    account.balance -= amount
+
+    return await repo.add_transaction(
+        session,
+        couple_id=couple_id,
+        type="consume",
+        from_user_id=spender_id,
+        to_user_id=None,
+        actor_id=spender_id,
+        amount=amount,
+        ref_type=ref_type,
+        ref_id=ref_id,
+        idempotency_key=idempotency_key or uuid4().hex,
+        remark=remark,
+    )
+
+
 async def gift(
     session: AsyncSession,
     couple: Couple,
@@ -43,28 +122,29 @@ async def gift(
     if existing is not None:
         return existing
 
-    # 先取出 id：提交/回滚都可能让 ORM 对象过期，之后不要再用它们
     giver_id = giver.id
     recipient_id = couple.user2_id if couple.user1_id == giver_id else couple.user1_id
 
-    await repo.ensure_account(session, recipient_id)
-    account = await repo.lock_account(session, recipient_id)
-    if account is None:
-        raise AppError("金币账户异常", code=4003, status_code=500)
-    account.balance += amount
+    try:
+        transaction = await mint_locked(
+            session,
+            couple_id=couple.id,
+            actor_id=giver_id,
+            recipient_id=recipient_id,
+            amount=amount,
+            remark=remark,
+            idempotency_key=key,
+        )
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        existing = await repo.find_by_idempotency_key(session, key)
+        if existing is not None:
+            return existing
+        raise
 
-    transaction = await repo.add_transaction(
-        session,
-        couple_id=couple.id,
-        type="gift",
-        from_user_id=None,
-        to_user_id=recipient_id,
-        actor_id=giver_id,
-        amount=amount,
-        idempotency_key=key,
-        remark=remark,
-    )
-    return await _commit_or_replay(session, transaction, key)
+    await session.refresh(transaction)
+    return transaction
 
 
 async def spend(
@@ -78,7 +158,7 @@ async def spend(
     idempotency_key: str | None = None,
     remark: str | None = None,
 ) -> CoinTransaction:
-    """消费金币（销毁）。余额不足时抛错，不产生流水。"""
+    """消费金币（销毁）。独立调用时使用；模块内部请用 spend_locked。"""
     if amount <= 0:
         raise AppError("金币数量不合法", code=4002, status_code=400)
 
@@ -87,40 +167,17 @@ async def spend(
     if existing is not None:
         return existing
 
-    spender_id = spender.id
-    couple_id = couple.id
-
-    await repo.ensure_account(session, spender_id)
-    account = await repo.lock_account(session, spender_id)
-    if account is None:
-        raise AppError("金币账户异常", code=4003, status_code=500)
-    if account.balance < amount:
-        await session.rollback()
-        raise AppError("金币不足", code=4001, status_code=409)
-
-    account.balance -= amount
-
-    transaction = await repo.add_transaction(
-        session,
-        couple_id=couple_id,
-        type="consume",
-        from_user_id=spender_id,
-        to_user_id=None,
-        actor_id=spender_id,
-        amount=amount,
-        ref_type=ref_type,
-        ref_id=ref_id,
-        idempotency_key=key,
-        remark=remark,
-    )
-    return await _commit_or_replay(session, transaction, key)
-
-
-async def _commit_or_replay(
-    session: AsyncSession, transaction: CoinTransaction, key: str
-) -> CoinTransaction:
-    """提交；若幂等键冲突，回滚并返回已存在的那条流水。"""
     try:
+        transaction = await spend_locked(
+            session,
+            couple_id=couple.id,
+            spender_id=spender.id,
+            amount=amount,
+            ref_type=ref_type,
+            ref_id=ref_id,
+            remark=remark,
+            idempotency_key=key,
+        )
         await session.commit()
     except IntegrityError:
         await session.rollback()
@@ -128,6 +185,10 @@ async def _commit_or_replay(
         if existing is not None:
             return existing
         raise
+    except AppError:
+        await session.rollback()
+        raise
+
     await session.refresh(transaction)
     return transaction
 

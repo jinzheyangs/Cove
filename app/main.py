@@ -8,6 +8,7 @@ from app.core.db import engine
 from app.core.errors import register_exception_handlers
 from app.modules.coins.router import router as coins_router
 from app.modules.couples.router import router as couples_router
+from app.modules.secrets.router import router as secrets_router
 from app.modules.users.router import auth_router, users_router
 
 API_PREFIX = "/api/v1"
@@ -26,6 +27,7 @@ app.include_router(auth_router, prefix=API_PREFIX)
 app.include_router(users_router, prefix=API_PREFIX)
 app.include_router(couples_router, prefix=API_PREFIX)
 app.include_router(coins_router, prefix=API_PREFIX)
+app.include_router(secrets_router, prefix=API_PREFIX)
 
 
 @app.get("/health")
