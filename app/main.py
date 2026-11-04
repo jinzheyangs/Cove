@@ -6,8 +6,10 @@ from sqlalchemy import text
 from app.core.config import settings
 from app.core.db import engine
 from app.core.errors import register_exception_handlers
+from app.modules.coin_applies.router import router as coin_applies_router
 from app.modules.coins.router import router as coins_router
 from app.modules.couples.router import router as couples_router
+from app.modules.mall.router import router as mall_router
 from app.modules.secrets.router import router as secrets_router
 from app.modules.users.router import auth_router, users_router
 
@@ -28,6 +30,8 @@ app.include_router(users_router, prefix=API_PREFIX)
 app.include_router(couples_router, prefix=API_PREFIX)
 app.include_router(coins_router, prefix=API_PREFIX)
 app.include_router(secrets_router, prefix=API_PREFIX)
+app.include_router(coin_applies_router, prefix=API_PREFIX)
+app.include_router(mall_router, prefix=API_PREFIX)
 
 
 @app.get("/health")
