@@ -1,11 +1,13 @@
+"""业务层：情侣绑定规则。"""
+
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
+from app.modules.couples import repository as repo
 from app.modules.couples.models import Couple, CoupleInvite
 from app.modules.users.models import User
 
@@ -18,32 +20,24 @@ def _generate_code() -> str:
     return "".join(secrets.choice(_CODE_ALPHABET) for _ in range(6))
 
 
-async def _active_couple(session: AsyncSession, user_id: int) -> Couple | None:
-    return await session.scalar(
-        select(Couple).where(
-            Couple.status == "active",
-            or_(Couple.user1_id == user_id, Couple.user2_id == user_id),
-        )
-    )
-
-
 async def create_invite(session: AsyncSession, user: User) -> CoupleInvite:
-    if await _active_couple(session, user.id) is not None:
+    if await repo.get_active_by_user(session, user.id) is not None:
         raise AppError("你已经绑定过伴侣了", code=2001, status_code=409)
 
     # 邀请码理论上可能碰撞，重试几次
     for _ in range(5):
-        invite = CoupleInvite(
-            inviter_id=user.id,
-            code=_generate_code(),
-            expires_at=datetime.now(timezone.utc) + _INVITE_TTL,
-        )
-        session.add(invite)
         try:
+            invite = await repo.create_invite(
+                session,
+                inviter_id=user.id,
+                code=_generate_code(),
+                expires_at=datetime.now(timezone.utc) + _INVITE_TTL,
+            )
             await session.commit()
         except IntegrityError:
             await session.rollback()
             continue
+
         await session.refresh(invite)
         return invite
 
@@ -51,12 +45,7 @@ async def create_invite(session: AsyncSession, user: User) -> CoupleInvite:
 
 
 async def bind(session: AsyncSession, user: User, code: str) -> Couple:
-    invite = await session.scalar(
-        select(CoupleInvite).where(
-            CoupleInvite.code == code.strip().upper(),
-            CoupleInvite.status == "active",
-        )
-    )
+    invite = await repo.get_active_invite_by_code(session, code.strip().upper())
     if invite is None:
         raise AppError("邀请码无效", code=2003, status_code=404)
     if invite.expires_at <= datetime.now(timezone.utc):
@@ -64,25 +53,23 @@ async def bind(session: AsyncSession, user: User, code: str) -> Couple:
     if invite.inviter_id == user.id:
         raise AppError("不能绑定自己", code=2005, status_code=400)
 
-    # 锁住双方用户行（按 id 升序），避免并发绑定同一个人
     ids = sorted({invite.inviter_id, user.id})
-    await session.execute(
-        select(User.id).where(User.id.in_(ids)).order_by(User.id).with_for_update()
-    )
+    await repo.lock_users(session, ids)
 
-    if await _active_couple(session, user.id) is not None:
+    if await repo.get_active_by_user(session, user.id) is not None:
+        await session.rollback()
         raise AppError("你已经绑定过伴侣了", code=2001, status_code=409)
-    if await _active_couple(session, invite.inviter_id) is not None:
+    if await repo.get_active_by_user(session, invite.inviter_id) is not None:
+        await session.rollback()
         raise AppError("对方已经绑定过伴侣了", code=2006, status_code=409)
 
-    couple = Couple(
+    couple = await repo.create_couple(
+        session,
         user1_id=ids[0],
         user2_id=ids[1],
-        status="active",
         bind_at=datetime.now(timezone.utc),
     )
     invite.status = "used"
-    session.add(couple)
     try:
         await session.commit()
     except IntegrityError as exc:
@@ -94,4 +81,4 @@ async def bind(session: AsyncSession, user: User, code: str) -> Couple:
 
 
 async def get_active_couple(session: AsyncSession, user_id: int) -> Couple | None:
-    return await _active_couple(session, user_id)
+    return await repo.get_active_by_user(session, user_id)
