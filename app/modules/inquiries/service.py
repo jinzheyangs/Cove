@@ -4,7 +4,7 @@
 AI 只做一次固定调用，不走 agent。
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -62,7 +62,18 @@ async def generate(session: AsyncSession, couple: Couple, session_id: int) -> In
         f"问题：{item.question}\n\n"
         + "\n\n".join(f"想法 {i + 1}：{x.content}" for i, x in enumerate(inputs))
     )
-    response = await ai_client.complete(system=SYSTEM_PROMPT, user=prompt)
+    try:
+        response = await ai_client.complete(system=SYSTEM_PROMPT, user=prompt)
+    except AppError as exc:
+        if exc.code in (11001, 11003):
+            # 降级：双方的想法已经存下来了，回到 collecting 允许稍后重试
+            await session.rollback()
+            raise AppError(
+                "AI 分析暂时不可用，双方的想法已经保存，稍后再试",
+                code=13007,
+                status_code=503,
+            ) from exc
+        raise
 
     item.ai_response = response
     item.status = "reviewing"
@@ -90,7 +101,7 @@ async def close(session: AsyncSession, couple: Couple, session_id: int) -> Inqui
         raise AppError("当前状态不能关闭", code=13005, status_code=409)
 
     item.status = "closed"
-    item.closed_at = datetime.now(timezone.utc)
+    item.closed_at = datetime.now(UTC)
     await session.commit()
     await session.refresh(item)
     return item

@@ -6,6 +6,8 @@ from sqlalchemy import text
 from app.core.config import settings
 from app.core.db import engine
 from app.core.errors import register_exception_handlers
+from app.core.logging import configure_logging
+from app.core.middleware import RequestContextMiddleware
 from app.modules.bills.router import router as bills_router
 from app.modules.coin_applies.router import router as coin_applies_router
 from app.modules.coins.router import router as coins_router
@@ -22,6 +24,8 @@ from app.modules.users.router import auth_router, users_router
 
 API_PREFIX = "/api/v1"
 
+configure_logging()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -30,6 +34,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title=settings.APP_NAME, version="0.1.0", lifespan=lifespan)
+app.add_middleware(RequestContextMiddleware)
 register_exception_handlers(app)
 
 app.include_router(auth_router, prefix=API_PREFIX)

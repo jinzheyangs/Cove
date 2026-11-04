@@ -1,7 +1,7 @@
 """业务层：情侣绑定规则。"""
 
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,7 +31,7 @@ async def create_invite(session: AsyncSession, user: User) -> CoupleInvite:
                 session,
                 inviter_id=user.id,
                 code=_generate_code(),
-                expires_at=datetime.now(timezone.utc) + _INVITE_TTL,
+                expires_at=datetime.now(UTC) + _INVITE_TTL,
             )
             await session.commit()
         except IntegrityError:
@@ -48,7 +48,7 @@ async def bind(session: AsyncSession, user: User, code: str) -> Couple:
     invite = await repo.get_active_invite_by_code(session, code.strip().upper())
     if invite is None:
         raise AppError("邀请码无效", code=2003, status_code=404)
-    if invite.expires_at <= datetime.now(timezone.utc):
+    if invite.expires_at <= datetime.now(UTC):
         raise AppError("邀请码已过期", code=2004, status_code=410)
     if invite.inviter_id == user.id:
         raise AppError("不能绑定自己", code=2005, status_code=400)
@@ -67,7 +67,7 @@ async def bind(session: AsyncSession, user: User, code: str) -> Couple:
         session,
         user1_id=ids[0],
         user2_id=ids[1],
-        bind_at=datetime.now(timezone.utc),
+        bind_at=datetime.now(UTC),
     )
     invite.status = "used"
     try:

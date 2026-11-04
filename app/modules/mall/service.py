@@ -1,6 +1,6 @@
 """业务层：商城的上下架、购买与核销。"""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -153,7 +153,7 @@ async def complete_order(
         raise AppError("只有提供服务的一方可以确认完成", code=7010, status_code=403)
 
     order.status = "completed"
-    order.completed_at = datetime.now(timezone.utc)
+    order.completed_at = datetime.now(UTC)
     await session.commit()
     await session.refresh(order)
     return order

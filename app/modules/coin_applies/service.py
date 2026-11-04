@@ -1,6 +1,6 @@
 """业务层：金币申请的提交与审批。"""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -89,7 +89,7 @@ async def approve(
         item.approved_amount = final_amount
         item.decided_by = reviewer.id
         item.decision_remark = remark
-        item.decided_at = datetime.now(timezone.utc)
+        item.decided_at = datetime.now(UTC)
         await session.commit()
     except AppError:
         await session.rollback()
@@ -110,7 +110,7 @@ async def reject(
     item.status = "rejected"
     item.decided_by = reviewer.id
     item.decision_remark = remark
-    item.decided_at = datetime.now(timezone.utc)
+    item.decided_at = datetime.now(UTC)
     await session.commit()
     await session.refresh(item)
     return item

@@ -4,7 +4,7 @@ from app.core.deps import CurrentUser, SessionDep
 from app.core.schemas import Envelope
 from app.modules.couples.deps import CurrentCouple
 from app.modules.inquiries import service
-from app.modules.inquiries.schemas import InquiryCreate, InquiryOut, InputCreate
+from app.modules.inquiries.schemas import InputCreate, InquiryCreate, InquiryOut
 
 router = APIRouter(prefix="/inquiries", tags=["inquiries"])
 

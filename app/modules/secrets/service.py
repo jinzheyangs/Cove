@@ -1,6 +1,6 @@
 """业务层：秘密的发布、摘取、燃尽与销毁。"""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,7 +20,9 @@ def _partner_id(couple: Couple, user_id: int) -> int:
     return couple.user2_id if couple.user1_id == user_id else couple.user1_id
 
 
-async def publish(session: AsyncSession, couple: Couple, author: User, body: SecretCreate) -> Secret:
+async def publish(
+    session: AsyncSession, couple: Couple, author: User, body: SecretCreate
+) -> Secret:
     cost = body.cost_coins or DEFAULT_COST[body.level]
     secret = await repo.create(
         session,
@@ -102,7 +104,7 @@ async def unlock(
             ref_id=secret.id,
         )
         secret.viewed_by = viewer.id
-        secret.viewed_at = datetime.now(timezone.utc)
+        secret.viewed_at = datetime.now(UTC)
         if secret.is_burn_after_read:
             secret.status = "burned"
         await session.commit()
@@ -132,7 +134,7 @@ async def destroy_all_mine(session: AsyncSession, couple: Couple, user: User) ->
 
 
 async def purge_burned(session: AsyncSession) -> int:
-    count = await repo.purge_burned_before(session, datetime.now(timezone.utc) - BURN_GRACE)
+    count = await repo.purge_burned_before(session, datetime.now(UTC) - BURN_GRACE)
     await session.commit()
     return count
 

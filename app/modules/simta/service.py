@@ -83,5 +83,16 @@ async def chat(
     system = FAITHFUL_PROMPT if fidelity == "faithful" else IDEALIZED_PROMPT
     prompt = f"关于 TA 的记录：\n{context}\n\n用户说：{message}"
 
-    reply = await ai_client.complete(system=system, user=prompt)
+    try:
+        reply = await ai_client.complete(system=system, user=prompt)
+    except AppError as exc:
+        if exc.code in (11001, 11003):
+            # 降级：不把技术错误甩给用户
+            raise AppError(
+                "TA 的数字分身暂时连不上。真人一直在。",
+                code=14002,
+                status_code=503,
+            ) from exc
+        raise
+
     return ChatResponse(reply=reply, fidelity=fidelity, disclaimer=DISCLAIMER)

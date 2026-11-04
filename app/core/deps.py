@@ -1,5 +1,6 @@
 from typing import Annotated
 
+import structlog
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,6 +31,9 @@ async def get_current_user(
     user = await user_repo.get_by_id(session, user_id)
     if user is None:
         raise AppError("用户不存在", code=401, status_code=401)
+
+    # 之后的日志自动带上 user_id
+    structlog.contextvars.bind_contextvars(user_id=user.id)
     return user
 
 

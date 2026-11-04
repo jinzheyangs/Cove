@@ -3,17 +3,18 @@
 启动方式：arq app.worker.WorkerSettings
 """
 
-import logging
-
+import structlog
 from arq import cron
 from arq.connections import RedisSettings
 
 from app.core.config import settings
 from app.core.db import SessionLocal
+from app.core.logging import configure_logging
 from app.modules.coins import service as coin_service
 from app.modules.secrets import service as secret_service
 
-logger = logging.getLogger(__name__)
+configure_logging()
+logger = structlog.get_logger("worker")
 
 
 async def ping(ctx: dict) -> str:

@@ -13,7 +13,6 @@ router = APIRouter(prefix="/secrets", tags=["secrets"])
 async def publish(
     body: SecretCreate, user: CurrentUser, couple: CurrentCouple, session: SessionDep
 ) -> Envelope[SecretListItem]:
-    user_id = user.id
     secret = await service.publish(session, couple, user, body)
     return Envelope(
         data=SecretListItem(

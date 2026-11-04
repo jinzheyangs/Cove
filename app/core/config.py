@@ -28,5 +28,9 @@ class Settings(BaseSettings):
     LLM_BASE_URL: str = "https://api.deepseek.com/v1"
     LLM_MODEL: str = "deepseek-chat"
 
+    LOG_LEVEL: str = "INFO"
+    AI_FAILURE_THRESHOLD: int = 5
+    AI_RECOVERY_SECONDS: float = 60.0
+
 
 settings = Settings()

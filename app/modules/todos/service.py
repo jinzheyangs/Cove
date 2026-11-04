@@ -1,6 +1,6 @@
 """业务层：共同清单与单人清单。"""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -61,7 +61,7 @@ async def update(
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(todo, field, value)
     if body.status == "completed" and todo.completed_at is None:
-        todo.completed_at = datetime.now(timezone.utc)
+        todo.completed_at = datetime.now(UTC)
     await session.commit()
     await session.refresh(todo)
     return todo
@@ -75,7 +75,7 @@ async def complete(
         raise AppError("这件事已经完成过了", code=9003, status_code=409)
 
     todo.status = "completed"
-    todo.completed_at = datetime.now(timezone.utc)
+    todo.completed_at = datetime.now(UTC)
     await session.commit()
     await session.refresh(todo)
 

@@ -3,7 +3,7 @@
 熔断只提示、不判定对错，也不阻断发送——被系统指责只会让冲突升级。
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -96,7 +96,7 @@ async def end(session: AsyncSession, couple: Couple, session_id: int) -> Conflic
         raise AppError("当前状态不能结束对话", code=12005, status_code=409)
 
     conflict.status = "reviewing"
-    conflict.ended_at = datetime.now(timezone.utc)
+    conflict.ended_at = datetime.now(UTC)
     await session.commit()
     await session.refresh(conflict)
     return conflict
