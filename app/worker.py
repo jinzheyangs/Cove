@@ -11,6 +11,7 @@ from arq.connections import RedisSettings
 from app.core.config import settings
 from app.core.db import SessionLocal
 from app.modules.coins import service as coin_service
+from app.modules.secrets import service as secret_service
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,19 @@ async def reconcile_coins(ctx: dict) -> int:
     return len(mismatches)
 
 
+async def purge_burned_secrets(ctx: dict) -> int:
+    """燃尽期结束后，把阅后即焚的秘密内容清空。"""
+    async with SessionLocal() as session:
+        count = await secret_service.purge_burned(session)
+
+    logger.info("清理燃尽秘密 %d 条", count)
+    return count
+
+
 class WorkerSettings:
     functions = [ping]
-    cron_jobs = [cron(reconcile_coins, hour=3, minute=17)]
+    cron_jobs = [
+        cron(reconcile_coins, hour=3, minute=17),
+        cron(purge_burned_secrets, hour=3, minute=41),
+    ]
     redis_settings = RedisSettings.from_dsn(settings.REDIS_URL)

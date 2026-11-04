@@ -9,10 +9,14 @@ from app.core.errors import register_exception_handlers
 from app.modules.bills.router import router as bills_router
 from app.modules.coin_applies.router import router as coin_applies_router
 from app.modules.coins.router import router as coins_router
+from app.modules.conflicts.router import router as conflicts_router
 from app.modules.couples.router import router as couples_router
+from app.modules.daily.router import router as daily_router
 from app.modules.diaries.router import router as diaries_router
+from app.modules.inquiries.router import router as inquiries_router
 from app.modules.mall.router import router as mall_router
 from app.modules.secrets.router import router as secrets_router
+from app.modules.simta.router import router as simta_router
 from app.modules.todos.router import router as todos_router
 from app.modules.users.router import auth_router, users_router
 
@@ -38,6 +42,10 @@ app.include_router(mall_router, prefix=API_PREFIX)
 app.include_router(diaries_router, prefix=API_PREFIX)
 app.include_router(todos_router, prefix=API_PREFIX)
 app.include_router(bills_router, prefix=API_PREFIX)
+app.include_router(conflicts_router, prefix=API_PREFIX)
+app.include_router(inquiries_router, prefix=API_PREFIX)
+app.include_router(daily_router, prefix=API_PREFIX)
+app.include_router(simta_router, prefix=API_PREFIX)
 
 
 @app.get("/health")

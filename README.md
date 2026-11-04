@@ -4,7 +4,7 @@
 
 Cove 是一个面向情侣的关系经营 App。这个仓库是**后端服务**的源码。
 
-> 状态：开发中，尚未发布。
+> 状态：功能开发中，尚未发布。
 
 ## 技术栈
 
@@ -14,7 +14,6 @@ Cove 是一个面向情侣的关系经营 App。这个仓库是**后端服务**�
 | ORM | SQLAlchemy 2.0 (async) + asyncpg |
 | 数据库 | PostgreSQL 16 |
 | 缓存 / 队列 | Redis 7 + ARQ |
-| 向量检索 | Chroma |
 | 部署 | Docker Compose + uvicorn |
 | 包管理 | uv |
 
@@ -28,7 +27,7 @@ uv run alembic upgrade head
 uv run uvicorn app.main:app --reload
 ```
 
-> 本地映射的是 **55432** 端口（避开机器上可能已有的 5432）。
+> 本地数据库映射到 **55432** 端口，避开机器上可能已有的 5432。
 
 验证：
 
@@ -38,6 +37,12 @@ curl http://localhost:8000/health/db
 ```
 
 接口文档：<http://localhost:8000/docs>
+
+后台任务（对账、燃尽清理）：
+
+```bash
+uv run arq app.worker.WorkerSettings
+```
 
 ## 测试
 
@@ -49,7 +54,7 @@ uv run pytest
 
 ## 架构
 
-经典三层。每个模块：
+经典三层，依赖方向固定为 `router → service → repository`，不许反向。
 
 ```
 app/modules/<name>/
@@ -60,61 +65,59 @@ app/modules/<name>/
 └── schemas.py      # 请求 / 响应结构
 ```
 
-依赖方向永远是 `router → service → repository`，不许反向。
+跨模块的事务组合：`coins.service` 提供 `mint_locked` / `spend_locked`，
+它们不提交事务，调用方把「扣币 + 业务写入」放进同一个事务。
 
-```
-app/
-├── main.py
-├── worker.py       # ARQ 后台任务（含每日金币对账）
-├── core/           # 配置、数据库、鉴权、错误处理
-└── modules/
-    ├── users/
-    ├── couples/
-    └── coins/
-migrations/
-tests/
-```
+## 模块
 
-## 已实现接口
-
-### 认证
-
-| 方法 | 路径 |
-|---|---|
-| POST | `/api/v1/auth/register` |
-| POST | `/api/v1/auth/login` |
-| GET | `/api/v1/users/me` |
-
-### 情侣绑定
-
-| 方法 | 路径 |
-|---|---|
-| POST | `/api/v1/couples/invite` |
-| POST | `/api/v1/couples/bind` |
-| GET | `/api/v1/couples/me` |
-
-### 金币
-
-| 方法 | 路径 | 说明 |
+| 模块 | 前缀 | 说明 |
 |---|---|---|
-| GET | `/api/v1/coins/balance` | 当前余额 |
-| GET | `/api/v1/coins/transactions` | 流水（分页） |
-| POST | `/api/v1/coins/gift` | 赠与对方金币 |
+| 认证 | `/api/v1/auth` | 手机号 + 密码，JWT |
+| 用户 | `/api/v1/users` | 当前用户 |
+| 情侣 | `/api/v1/couples` | 邀请码绑定、解绑（待做） |
+| 金币 | `/api/v1/coins` | 余额、流水、赠与 |
+| 金币申请 | `/api/v1/coin-applies` | 申请、审批、拒绝 |
+| 秘密树 | `/api/v1/secrets` | 发布、摘取、燃尽、销毁 |
+| 商城 | `/api/v1/mall` | 上架审批、购买、核销 |
+| 日记 | `/api/v1/diaries` | 共同编辑 / 各自视角 |
+| 清单 | `/api/v1/todos` | 共同 / 单人，完成生成纪念卡 |
+| 账本 | `/api/v1/bills` | 金钱与非金钱付出、隐私、统计 |
+| 争吵 | `/api/v1/conflicts` | 消息、伤害提示、强制复盘 |
+| 询问中心 | `/api/v1/inquiries` | 匿名输入、AI 汇总、补充、关闭 |
+| 每日一问 | `/api/v1/daily` | 固定题库，每天一题 |
+| 模拟TA | `/api/v1/sim-ta` | 授权、忠实度、对话 |
 
-金币规则：
+## 关键设计决策
 
-- **赠与 = 系统发行**，不扣赠与方余额
-- **消费 = 销毁**，流水的 `to_user_id` 为 NULL
-- 余额是缓存，流水是真相；worker 每天 03:17 自动对账
-- 所有写操作靠 `idempotency_key` 唯一索引兜底，重复提交只生效一次
-- 扣减时对 `coin_accounts` 行加锁，并发下余额不会为负
+- **金币消费 = 销毁**，赠与 = 系统发行。金币是消耗品，不是货币。
+- **余额是缓存，流水是真相**，worker 每天 03:17 对账。
+- **扣币加行锁**，按 `user_id` 升序，并发下余额不会为负。
+- **所有金币写操作有 `idempotency_key` 唯一索引。**
+- **阅后即焚**：读后 24 小时内可再看，之后由后台任务清空内容。
+- **一键销毁只销毁自己发布的秘密**，不触碰对方的。
+- **账本不提供个人对比**，只输出共同视角的汇总。
+- **争吵熔断只提示不阻断**，不判定谁对谁错。
+- **模拟TA 必须先获得对方授权**，撤销即停用；理想化模式禁止替对方做承诺。
+
+## 关于检索与模拟TA
+
+`app/modules/ai/retrieval.py` 当前用 PostgreSQL 里的日记与复盘作为上下文，
+接口已经隔离，替换成 Chroma + embedding 时业务层不用改。
+
+接入 Chroma 还差一步：需要先确定 embedding 模型
+（DeepSeek 不提供 embedding 接口，可选通义 / 智谱 / 本地 BGE）。
 
 ## 开发进度
 
-- [x] 项目骨架
+- [x] 项目骨架与三层架构
 - [x] 用户注册登录 / 情侣绑定
-- [x] 金币账本（余额、流水、赠与、消费、对账）
-- [ ] 金币申请与审批
-- [ ] 秘密树
-- [ ] 商城
-- [ ] 恋爱日记
+- [x] 金币账本与申请审批
+- [x] 秘密树
+- [x] 商城
+- [x] 恋爱日记 / 共同清单 / 恋爱账本
+- [x] 争吵模式 / 询问中心 / 每日一问
+- [x] 模拟TA（授权 + 设置 + 对话）
+- [ ] 情侣解绑与数据导出
+- [ ] 日记导出（长图 / PDF / 短视频）
+- [ ] 通知与推送
+- [ ] Chroma 向量检索
