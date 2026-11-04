@@ -3,6 +3,9 @@ services:
     build: .
     env_file:
       - .env
+    environment:
+      # 容器内用服务名访问，覆盖 .env 里的 localhost
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
     depends_on:
       postgres:
         condition: service_healthy
@@ -19,6 +22,8 @@ services:
     build: .
     env_file:
       - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
     depends_on:
       postgres:
         condition: service_healthy
@@ -27,7 +32,9 @@ services:
     command: uv run arq app.worker.WorkerSettings
 
   postgres:
-    image: postgres:16
+    image: postgres:16-alpine
+    ports:
+      - "55432:5432"         # 仅开发用；生产环境不要映射。避开本机已有的 5432
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
