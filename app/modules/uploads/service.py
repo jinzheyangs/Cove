@@ -67,11 +67,11 @@ async def upload_diary_image(
         key 用于入库，url 用于展示。
     """
     normalized = (content_type or "").split(";")[0].strip().lower()
-    _check_content(normalized, data)
+    _check_content(normalized, data)  #校验类型、文件头和大小。
 
-    ext = _ALLOWED[normalized][0]
-    key = _key_for(couple.id, ext)
-    storage = get_storage()
+    ext = _ALLOWED[normalized][0]  #得到类型
+    key = _key_for(couple.id, ext)  #生成对象key
+    storage = get_storage() #返回oss实例
 
     # 本地写盘和 OSS 上传都是阻塞操作，放到线程池，避免卡住事件循环
     await asyncio.to_thread(storage.save, key, data, normalized)
