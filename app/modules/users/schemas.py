@@ -1,20 +1,39 @@
+"""用户模块的请求 / 响应结构。
+
+这些模型同时承担接口校验和 OpenAPI 文档生成。
+"""
+
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
 class RegisterRequest(BaseModel):
+    """注册请求。
+
+    手机号只做格式校验，不做真实性验证（没有接短信），
+    因此它实际上只是一个用户名。
+    """
+
     phone: str = Field(pattern=r"^1[3-9]\d{9}$", description="中国大陆手机号")
     password: str = Field(min_length=6, max_length=64)
     nickname: str = Field(min_length=1, max_length=50)
 
 
 class LoginRequest(BaseModel):
+    """登录请求。不做格式校验，避免给撞库者额外信息。"""
+
     phone: str
     password: str
 
 
 class UserOut(BaseModel):
+    """对外暴露的用户信息。
+
+    刻意不包含 password_hash、deleted_at 等内部字段。
+    from_attributes=True 让它可以由 ORM 对象直接转换。
+    """
+
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -25,6 +44,13 @@ class UserOut(BaseModel):
 
 
 class TokenOut(BaseModel):
+    """登录 / 注册 / 刷新成功后的返回。
+
+    - access_token：放在 Authorization: Bearer 里
+    - refresh_token：只在这里返回原文，客户端需要安全保存
+    - expires_in：access token 剩余秒数，前端据此决定何时刷新
+    """
+
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
@@ -33,4 +59,6 @@ class TokenOut(BaseModel):
 
 
 class RefreshRequest(BaseModel):
+    """刷新或登出时提交 refresh token。"""
+
     refresh_token: str = Field(min_length=10, max_length=200)
