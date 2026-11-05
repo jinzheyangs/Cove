@@ -10,6 +10,7 @@ from app.modules.couples.models import Couple
 from app.modules.mall import repository as repo
 from app.modules.mall.models import MallItem, MallOrder
 from app.modules.mall.schemas import ItemCreate
+from app.modules.notifications import service as notification_service
 from app.modules.users.models import User
 
 
@@ -136,6 +137,15 @@ async def buy(
             buyer_id=buyer_id,
             price=price,
         )
+        await notification_service.notify(
+            session,
+            user_id=item.creator_id,
+            type="mall.order_created",
+            title="有人兑换了你的商品",
+            content=item.title,
+            related_type="mall_order",
+            related_id=order.id,
+        )
         await session.commit()
     except AppError:
         await session.rollback()
@@ -160,6 +170,14 @@ async def complete_order(
 
     order.status = "completed"
     order.completed_at = datetime.now(UTC)
+    await notification_service.notify(
+        session,
+        user_id=order.buyer_id,
+        type="mall.order_completed",
+        title="你的兑换已完成",
+        related_type="mall_order",
+        related_id=order.id,
+    )
     await session.commit()
     await session.refresh(order)
     return order

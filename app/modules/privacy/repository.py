@@ -15,6 +15,7 @@ from app.modules.conflicts.models import ConflictMessage, ConflictReview
 from app.modules.daily.models import DailyAnswer
 from app.modules.diaries.models import Diary
 from app.modules.inquiries.models import InquiryInput, InquirySupplement
+from app.modules.notifications.models import Notification
 from app.modules.secrets.models import Secret
 from app.modules.simta.models import PersonaConsent, PersonaSettings
 from app.modules.todos.models import TodoItem
@@ -39,6 +40,7 @@ async def purge_personal_content(session: AsyncSession, user_id: int) -> None:
         (PersonaConsent, PersonaConsent.user_id),
         (PersonaSettings, PersonaSettings.owner_id),
         (CoinApply, CoinApply.applicant_id),
+        (Notification, Notification.user_id),
         (AuditLog, AuditLog.user_id),
     )
     for model, column in targets:

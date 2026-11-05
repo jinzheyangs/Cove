@@ -10,6 +10,7 @@ from app.core.errors import AppError
 from app.modules.audit import service as audit_service
 from app.modules.couples import repository as repo
 from app.modules.couples.models import Couple, CoupleInvite
+from app.modules.notifications import service as notification_service
 from app.modules.users.models import User
 
 # 去掉了容易混淆的 0/O/I/1
@@ -71,6 +72,14 @@ async def bind(session: AsyncSession, user: User, code: str) -> Couple:
         bind_at=datetime.now(UTC),
     )
     invite.status = "used"
+    await notification_service.notify(
+        session,
+        user_id=invite.inviter_id,
+        type="couple.bound",
+        title="你们已经绑定啦",
+        related_type="couple",
+        related_id=couple.id,
+    )
     await audit_service.record(
         session,
         user_id=user.id,

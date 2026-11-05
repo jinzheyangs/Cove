@@ -9,6 +9,7 @@ from app.modules.coin_applies import repository as repo
 from app.modules.coin_applies.models import CoinApply
 from app.modules.coins import service as coin_service
 from app.modules.couples.models import Couple
+from app.modules.notifications import service as notification_service
 from app.modules.users.models import User
 
 MAX_PENDING = 5
@@ -90,6 +91,15 @@ async def approve(
         item.decided_by = reviewer.id
         item.decision_remark = remark
         item.decided_at = datetime.now(UTC)
+        await notification_service.notify(
+            session,
+            user_id=item.applicant_id,
+            type="coin_apply.approved",
+            title="你的金币申请通过了",
+            content=f"获得 {final_amount} 金币",
+            related_type="coin_apply",
+            related_id=item.id,
+        )
         await session.commit()
     except AppError:
         await session.rollback()
@@ -111,6 +121,15 @@ async def reject(
     item.decided_by = reviewer.id
     item.decision_remark = remark
     item.decided_at = datetime.now(UTC)
+    await notification_service.notify(
+        session,
+        user_id=item.applicant_id,
+        type="coin_apply.rejected",
+        title="你的金币申请被拒绝了",
+        content=remark,
+        related_type="coin_apply",
+        related_id=item.id,
+    )
     await session.commit()
     await session.refresh(item)
     return item

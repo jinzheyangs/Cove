@@ -13,6 +13,7 @@ from app.modules.daily import models as daily_models  # noqa: F401
 from app.modules.diaries import models as diaries_models  # noqa: F401
 from app.modules.inquiries import models as inquiries_models  # noqa: F401
 from app.modules.mall import models as mall_models  # noqa: F401
+from app.modules.notifications import models as notifications_models  # noqa: F401
 from app.modules.secrets import models as secrets_models  # noqa: F401
 from app.modules.simta import models as simta_models  # noqa: F401
 from app.modules.todos import models as todos_models  # noqa: F401

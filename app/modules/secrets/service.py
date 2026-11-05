@@ -8,6 +8,7 @@ from app.core.errors import AppError
 from app.modules.audit import service as audit_service
 from app.modules.coins import service as coin_service
 from app.modules.couples.models import Couple
+from app.modules.notifications import service as notification_service
 from app.modules.secrets import repository as repo
 from app.modules.secrets.models import Secret
 from app.modules.secrets.schemas import DEFAULT_COST, SecretCreate, SecretDetail, SecretListItem
@@ -108,6 +109,14 @@ async def unlock(
         secret.viewed_at = datetime.now(UTC)
         if secret.is_burn_after_read:
             secret.status = "burned"
+        await notification_service.notify(
+            session,
+            user_id=secret.author_id,
+            type="secret.unlocked",
+            title="你的秘密被摘取了",
+            related_type="secret",
+            related_id=secret.id,
+        )
         await session.commit()
     except AppError:
         await session.rollback()

@@ -23,6 +23,7 @@ from app.modules.daily.router import router as daily_router
 from app.modules.diaries.router import router as diaries_router
 from app.modules.inquiries.router import router as inquiries_router
 from app.modules.mall.router import router as mall_router
+from app.modules.notifications.router import router as notifications_router
 from app.modules.privacy.router import router as privacy_router
 from app.modules.secrets.router import router as secrets_router
 from app.modules.simta.router import router as simta_router
@@ -73,6 +74,7 @@ app.include_router(inquiries_router, prefix=API_PREFIX)
 app.include_router(daily_router, prefix=API_PREFIX)
 app.include_router(simta_router, prefix=API_PREFIX)
 app.include_router(privacy_router, prefix=API_PREFIX)
+app.include_router(notifications_router, prefix=API_PREFIX)
 
 
 @app.get("/health")
