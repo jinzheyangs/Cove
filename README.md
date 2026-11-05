@@ -36,7 +36,17 @@ curl http://localhost:8000/health
 curl http://localhost:8000/health/db
 ```
 
-接口文档：<http://localhost:8000/docs>
+接口文档：
+
+- 在线试用：<http://localhost:8000/docs>
+- 前端接口表：[docs/API.md](docs/API.md)
+- OpenAPI JSON（可导入 Apifox / Postman）：[docs/openapi.json](docs/openapi.json)
+
+重新生成：
+
+```bash
+uv run python scripts/generate_api_doc.py
+```
 
 后台任务（对账、燃尽清理）：
 
