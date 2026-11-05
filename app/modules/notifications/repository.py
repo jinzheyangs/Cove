@@ -1,4 +1,8 @@
-"""数据访问层：站内通知。"""
+"""数据访问层：站内通知。
+
+约定：写操作不 commit（notify 由业务事务提交）；
+标记已读这类独立操作由 service commit。
+"""
 
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,6 +11,7 @@ from app.modules.notifications.models import Notification
 
 
 async def create(session: AsyncSession, **values: object) -> Notification:
+    """插入通知并 flush，跟随调用方事务。"""
     notification = Notification(**values)
     session.add(notification)
     await session.flush()
@@ -21,6 +26,7 @@ async def list_for_user(
     limit: int,
     offset: int,
 ) -> list[Notification]:
+    """列出用户的通知，时间倒序。"""
     stmt = select(Notification).where(Notification.user_id == user_id)
     if unread_only:
         stmt = stmt.where(Notification.is_read.is_(False))
@@ -29,6 +35,7 @@ async def list_for_user(
 
 
 async def count_unread(session: AsyncSession, user_id: int) -> int:
+    """统计未读数。"""
     value = await session.scalar(
         select(func.count())
         .select_from(Notification)
@@ -38,6 +45,11 @@ async def count_unread(session: AsyncSession, user_id: int) -> int:
 
 
 async def mark_read(session: AsyncSession, notification_id: int, user_id: int) -> bool:
+    """把一条通知标记为已读。
+
+    条件里带 user_id：不能标记别人的通知。
+    返回是否真的更新了一行。
+    """
     result = await session.execute(
         update(Notification)
         .where(
@@ -50,6 +62,7 @@ async def mark_read(session: AsyncSession, notification_id: int, user_id: int) -
 
 
 async def mark_all_read(session: AsyncSession, user_id: int) -> int:
+    """把该用户全部未读通知标记为已读，返回更新数量。"""
     result = await session.execute(
         update(Notification)
         .where(Notification.user_id == user_id, Notification.is_read.is_(False))

@@ -20,6 +20,14 @@ async def notify(
     related_type: str | None = None,
     related_id: int | None = None,
 ) -> Notification:
+    """写一条通知（不提交）。
+
+    调用方通常已经在做某个业务操作，
+    这个通知会和业务写入一起提交。
+
+    注意 content 不要放秘密/日记原文，
+    它不是展示正文的地方，只是简短说明。
+    """
     return await repo.create(
         session,
         user_id=user_id,
@@ -39,22 +47,26 @@ async def list_mine(
     limit: int,
     offset: int,
 ) -> list[Notification]:
+    """列出自己的通知。"""
     return await repo.list_for_user(
         session, user_id, unread_only=unread_only, limit=limit, offset=offset
     )
 
 
 async def unread_count(session: AsyncSession, user_id: int) -> int:
+    """未读数。"""
     return await repo.count_unread(session, user_id)
 
 
 async def mark_read(session: AsyncSession, user_id: int, notification_id: int) -> bool:
+    """标记单条已读。返回是否更新成功。"""
     updated = await repo.mark_read(session, notification_id, user_id)
     await session.commit()
     return updated
 
 
 async def mark_all_read(session: AsyncSession, user_id: int) -> int:
+    """全部标记已读，返回更新数量。"""
     count = await repo.mark_all_read(session, user_id)
     await session.commit()
     return count
