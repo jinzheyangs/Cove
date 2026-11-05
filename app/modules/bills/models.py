@@ -10,12 +10,12 @@ from sqlalchemy import (
     Index,
     Numeric,
     String,
-    Text,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
+from app.core.types import EncryptedText
 
 
 class Bill(Base):
@@ -34,7 +34,7 @@ class Bill(Base):
     type: Mapped[str] = mapped_column(String(20), default="money", server_default="money")
     scope: Mapped[str] = mapped_column(String(20), default="shared", server_default="shared")
     is_private: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
-    remark: Mapped[str | None] = mapped_column(Text)
+    remark: Mapped[str | None] = mapped_column(EncryptedText)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

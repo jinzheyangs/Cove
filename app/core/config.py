@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     JWT_ACCESS_EXPIRE_MINUTES: int = 30
     JWT_REFRESH_EXPIRE_DAYS: int = 30
 
+    # 生成：openssl rand -base64 32
+    DATA_ENCRYPTION_KEY: str = ""
+
     LLM_API_KEY: str = ""
     LLM_BASE_URL: str = "https://api.deepseek.com/v1"
     LLM_MODEL: str = "deepseek-chat"

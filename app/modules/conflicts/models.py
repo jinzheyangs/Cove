@@ -8,13 +8,13 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     String,
-    Text,
     UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
+from app.core.types import EncryptedText
 
 
 class ConflictSession(Base):
@@ -47,7 +47,7 @@ class ConflictMessage(Base):
         BigInteger, ForeignKey("conflict_sessions.id")
     )
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
-    content: Mapped[str] = mapped_column(Text)
+    content: Mapped[str] = mapped_column(EncryptedText)
     flagged: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -64,8 +64,8 @@ class ConflictReview(Base):
         BigInteger, ForeignKey("conflict_sessions.id")
     )
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
-    want_to_be_understood: Mapped[str] = mapped_column(Text)
-    heard_partner_need: Mapped[str] = mapped_column(Text)
+    want_to_be_understood: Mapped[str] = mapped_column(EncryptedText)
+    heard_partner_need: Mapped[str] = mapped_column(EncryptedText)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

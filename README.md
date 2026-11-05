@@ -116,6 +116,8 @@ app/modules/<name>/
 - **登录防爆破**：连续失败 5 次锁定 15 分钟
 - **指标**：`/metrics` 暴露 Prometheus 指标，可用 `METRICS_TOKEN` 保护
 - **链路追踪**：OpenTelemetry + Jaeger，默认关闭；开启后可见 SQL / Redis / AI 调用的耗时瀑布图
+- **字段加密**：秘密、日记、争吵、询问等私密内容 AES-256-GCM 加密存储
+- **令牌生命周期**：access token 30 分钟，refresh token 可轮换、可吊销
 
 运维细节见 [docs/OPERATIONS.md](docs/OPERATIONS.md)。
 

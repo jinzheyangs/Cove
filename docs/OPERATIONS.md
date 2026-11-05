@@ -70,6 +70,36 @@ Redis 不可用时限流会放行（fail open），不会拖垮服务。
 
 排查顺序：请求 ID → 路径 → 状态码 → 耗时 → 异常栈。
 
+## 数据加密
+
+```bash
+openssl rand -base64 32    # 写入 DATA_ENCRYPTION_KEY
+```
+
+开启后以下字段在数据库里是密文（AES-256-GCM）：
+
+- 秘密内容 `secrets.content`
+- 日记标题与正文 `diaries.title/content`
+- 争吵消息与复盘 `conflict_messages` / `conflict_reviews`
+- 询问中心的问题、AI 分析、输入与补充 `inquiry_sessions` / `inquiry_inputs` / `inquiry_supplements`
+- 每日一问回答 `daily_answers.answer`
+- 账本备注 `bills.remark`
+
+**没有加密**的：金币流水、商城、账单金额、通知。这些要么是双方共用的账目，
+要么是结构化数据，加密收益低。
+
+历史明文数据用一次性脚本转换：
+
+```bash
+uv run python scripts/encrypt_existing_data.py
+```
+
+注意：
+
+- 换 `DATA_ENCRYPTION_KEY` 会导致旧数据无法解密，换之前必须先备份并重新加密
+- 这是服务端加密，不是端到端加密；拿到服务器和密钥的人仍可解密
+- 加密列不能做 `LIKE` / 全文检索
+
 ## 告警
 
 ```bash

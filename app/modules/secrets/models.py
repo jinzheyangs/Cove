@@ -8,12 +8,12 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     String,
-    Text,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
+from app.core.types import EncryptedText
 
 
 class Secret(Base):
@@ -22,7 +22,7 @@ class Secret(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     couple_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("couples.id"))
     author_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
-    content: Mapped[str] = mapped_column(Text)
+    content: Mapped[str] = mapped_column(EncryptedText)
     level: Mapped[str] = mapped_column(String(20), default="normal", server_default="normal")
     cost_coins: Mapped[int] = mapped_column(BigInteger)
     is_burn_after_read: Mapped[bool] = mapped_column(

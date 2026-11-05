@@ -7,6 +7,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy import text
 
 from app.core.config import settings
+from app.core.crypto import ensure_configured
 from app.core.db import engine
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
@@ -40,6 +41,7 @@ configure_logging()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    ensure_configured()
     yield
     await engine.dispose()
 

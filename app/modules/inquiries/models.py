@@ -7,13 +7,13 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     String,
-    Text,
     UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
+from app.core.types import EncryptedText
 
 
 class InquirySession(Base):
@@ -21,8 +21,8 @@ class InquirySession(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     couple_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("couples.id"))
-    question: Mapped[str] = mapped_column(Text)
-    ai_response: Mapped[str | None] = mapped_column(Text)
+    question: Mapped[str] = mapped_column(EncryptedText)
+    ai_response: Mapped[str | None] = mapped_column(EncryptedText)
     status: Mapped[str] = mapped_column(
         String(20), default="collecting", server_default="collecting"
     )
@@ -48,7 +48,7 @@ class InquiryInput(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     session_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("inquiry_sessions.id"))
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
-    content: Mapped[str] = mapped_column(Text)
+    content: Mapped[str] = mapped_column(EncryptedText)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -64,7 +64,7 @@ class InquirySupplement(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     session_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("inquiry_sessions.id"))
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
-    content: Mapped[str] = mapped_column(Text)
+    content: Mapped[str] = mapped_column(EncryptedText)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

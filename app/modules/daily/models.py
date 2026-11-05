@@ -7,13 +7,13 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     String,
-    Text,
     UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
+from app.core.types import EncryptedText
 
 
 class DailyAnswer(Base):
@@ -24,7 +24,7 @@ class DailyAnswer(Base):
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
     day: Mapped[date] = mapped_column(Date)
     question: Mapped[str] = mapped_column(String(200))
-    answer: Mapped[str] = mapped_column(Text)
+    answer: Mapped[str] = mapped_column(EncryptedText)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

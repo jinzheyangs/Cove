@@ -7,13 +7,13 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     String,
-    Text,
     func,
 )
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
+from app.core.types import EncryptedText
 
 
 class Diary(Base):
@@ -29,8 +29,8 @@ class Diary(Base):
     couple_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("couples.id"))
     event_id: Mapped[str | None] = mapped_column(String(36), index=True)
     mode: Mapped[str] = mapped_column(String(20))
-    title: Mapped[str | None] = mapped_column(String(200))
-    content: Mapped[str] = mapped_column(Text)
+    title: Mapped[str | None] = mapped_column(EncryptedText)
+    content: Mapped[str] = mapped_column(EncryptedText)
     mood_tags: Mapped[list[str]] = mapped_column(
         ARRAY(String), default=list, server_default="{}"
     )
