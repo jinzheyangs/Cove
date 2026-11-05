@@ -98,6 +98,26 @@ class Settings(BaseSettings):
     METRICS_TOKEN: str = ""
 
     # 链路追踪默认关闭，避免本地/测试依赖 Jaeger
+    # ---------------------------------------------------------------- 存储
+    # local：开发环境写本地目录；oss：阿里云对象存储
+    STORAGE_BACKEND: str = "local"
+    # local 后端的落盘目录，同时通过 /uploads 静态挂载
+    UPLOAD_DIR: str = "./uploads"
+    # 单张图片上限，默认 10MB
+    UPLOAD_MAX_BYTES: int = 10 * 1024 * 1024
+    # 公共读桶 / CDN 的访问前缀，例如 https://cdn.example.com
+    STORAGE_PUBLIC_BASE_URL: str = ""
+    # 私有桶签名 URL 的有效期（秒）
+    STORAGE_URL_EXPIRE_SECONDS: int = 3600
+
+    # 阿里云 OSS。STORAGE_BACKEND=oss 时必填
+    OSS_ENDPOINT: str = ""
+    OSS_BUCKET: str = ""
+    OSS_ACCESS_KEY_ID: str = ""
+    OSS_ACCESS_KEY_SECRET: str = ""
+    # True 表示私有桶，读取时生成签名 URL
+    OSS_PRIVATE: bool = True
+
     OTEL_ENABLED: bool = False
     OTEL_SERVICE_NAME: str = "cove-api"
     # OTLP HTTP 端点；容器内是 http://jaeger:4318/v1/traces

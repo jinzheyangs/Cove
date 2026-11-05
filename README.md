@@ -96,6 +96,7 @@ app/modules/<name>/
 | 询问中心 | `/api/v1/inquiries` | 匿名输入、AI 汇总、补充、关闭 |
 | 每日一问 | `/api/v1/daily` | 固定题库，每天一题 |
 | 模拟TA | `/api/v1/sim-ta` | 授权、忠实度、对话 |
+| 上传 | `/api/v1/uploads` | 日记图片上传、删除 |
 | 审计 | `/api/v1/audit` | 敏感操作记录 |
 | 通知 | `/api/v1/notifications` | 站内通知、未读数、已读 |
 | 隐私 | `/api/v1/privacy` | 注销账号、导出个人数据 |
@@ -111,6 +112,15 @@ app/modules/<name>/
 - **账本不提供个人对比**，只输出共同视角的汇总。
 - **争吵熔断只提示不阻断**，不判定谁对谁错。
 - **模拟TA 必须先获得对方授权**，撤销即停用；理想化模式禁止替对方做承诺。
+
+## 图片上传
+
+`POST /api/v1/uploads/diary-image`（multipart）上传日记图片，返回 `key` 和 `url`。
+
+- 数据库存 **key**，展示时用服务端生成的 **url**
+- 开发环境：`STORAGE_BACKEND=local`，文件落到 `./uploads`，通过 `/uploads` 访问
+- 生产环境：`STORAGE_BACKEND=oss`，并安装 OSS 依赖：`uv sync --extra oss`
+- 私有 OSS 桶返回的是带时效的签名 URL，**不要把它存进数据库**
 
 ## 可观测性与容错
 
@@ -152,6 +162,7 @@ app/modules/<name>/
 - [x] 解绑、注销账号、数据导出
 - [x] CI/CD、限流、审计、站内通知、指标
 - [x] 备份脚本与运维手册
+- [x] 日记图片上传（本地 / 阿里云 OSS）
 - [ ] 日记导出（长图 / PDF / 短视频）
 - [ ] 推送通知（厂商通道）
 - [ ] 运营后台

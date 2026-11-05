@@ -38,7 +38,12 @@ class DiaryUpdate(BaseModel):
 
 
 class DiaryOut(BaseModel):
-    """日记详情。content 返回时已解密。"""
+    """日记详情。content 返回时已解密。
+
+    图片相关有两个字段：
+    - `images`：数据库里的 object key，编辑时应原样回传
+    - `image_urls`：当前可访问的地址，只用于展示，不要入库
+    """
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -49,7 +54,10 @@ class DiaryOut(BaseModel):
     content: str
     mood_tags: list[str]
     location: str | None
+    # 存储 key，编辑时回传
     images: list[str]
+    # 展示 URL，由存储后端按需生成
+    image_urls: list[str] = Field(default_factory=list)
     author_id: int
     created_at: datetime
     updated_at: datetime

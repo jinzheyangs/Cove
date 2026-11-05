@@ -110,6 +110,10 @@ Base URL: https://<你的域名>/api/v1
 | 14001 | 403 | 对方还没有授权把 TA 的数据用于模拟 |
 | 14002 | 503 | TA 的数字分身暂时连不上。真人一直在。 |
 | 15001 | 403 | 密码错误 |
+| 16001 | 400 | 只支持 JPEG / PNG / WebP 图片 / 文件内容与类型不符 |
+| 16002 | 413 | 图片太大了 |
+| 16003 | 400 | 文件为空 |
+| 16004 | 403 | 无权删除这个文件 |
 
 > `429` 为限流；`500` 为未捕获异常，前端统一提示稍后重试。
 
@@ -189,6 +193,8 @@ Base URL: https://<你的域名>/api/v1
 | todos | PUT | `/api/v1/todos/{todo_id}` | 部分更新。单人清单只有创建者能改。 | 是 |
 | todos | DELETE | `/api/v1/todos/{todo_id}` | 删除清单项。 | 是 |
 | todos | POST | `/api/v1/todos/{todo_id}/complete` | 完成清单项，同时返回一张纪念卡片。 | 是 |
+| uploads | POST | `/api/v1/uploads/diary-image` | 上传一张日记图片。 | 是 |
+| uploads | DELETE | `/api/v1/uploads/{key}` | 删除当前关系内的一张图片。key 必须属于当前 couple。 | 是 |
 | users | GET | `/api/v1/users/me` | 获取当前登录用户。依赖已保证 user 存在。 | 是 |
 | ops | GET | `/health` | 进程存活检查。不访问数据库，用于负载均衡/容器探活。 | 否 |
 | ops | GET | `/health/db` | 数据库连通性检查。数据库不可用时这里会抛 500。 | 否 |
@@ -923,6 +929,7 @@ Base URL: https://<你的域名>/api/v1
 | `mood_tags` | string[] | 是 |
 | `location` | string? | 是 |
 | `images` | string[] | 是 |
+| `image_urls` | string[] | 否 |
 | `author_id` | int | 是 |
 | `created_at` | datetime | 是 |
 | `updated_at` | datetime | 是 |
@@ -957,6 +964,7 @@ Base URL: https://<你的域名>/api/v1
 | `mood_tags` | string[] | 是 |
 | `location` | string? | 是 |
 | `images` | string[] | 是 |
+| `image_urls` | string[] | 否 |
 | `author_id` | int | 是 |
 | `created_at` | datetime | 是 |
 | `updated_at` | datetime | 是 |
@@ -985,6 +993,7 @@ Base URL: https://<你的域名>/api/v1
 | `mood_tags` | string[] | 是 |
 | `location` | string? | 是 |
 | `images` | string[] | 是 |
+| `image_urls` | string[] | 否 |
 | `author_id` | int | 是 |
 | `created_at` | datetime | 是 |
 | `updated_at` | datetime | 是 |
@@ -1023,6 +1032,7 @@ Base URL: https://<你的域名>/api/v1
 | `mood_tags` | string[] | 是 |
 | `location` | string? | 是 |
 | `images` | string[] | 是 |
+| `image_urls` | string[] | 否 |
 | `author_id` | int | 是 |
 | `created_at` | datetime | 是 |
 | `updated_at` | datetime | 是 |
@@ -1788,6 +1798,37 @@ Base URL: https://<你的域名>/api/v1
 |---|---|---|
 | `todo` | TodoOut | 是 |
 | `card` | MemoryCard | 是 |
+
+---
+
+### uploads
+
+#### `POST /api/v1/uploads/diary-image`
+
+上传一张日记图片。
+
+**响应 data**
+
+| 字段 | 类型 | 必填 |
+|---|---|---|
+| `key` | string | 是 |
+| `url` | string | 是 |
+| `size` | int | 是 |
+| `content_type` | string | 是 |
+
+---
+
+#### `DELETE /api/v1/uploads/{key}`
+
+删除当前关系内的一张图片。key 必须属于当前 couple。
+
+**参数**
+
+| 位置 | 名称 | 类型 | 必填 |
+|---|---|---|---|
+| path | `key` | string | 是 |
+
+**响应 data**：`null` / `object`（见实现）
 
 ---
 

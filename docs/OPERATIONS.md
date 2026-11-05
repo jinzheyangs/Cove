@@ -70,6 +70,41 @@ Redis 不可用时限流会放行（fail open），不会拖垮服务。
 
 排查顺序：请求 ID → 路径 → 状态码 → 耗时 → 异常栈。
 
+## 对象存储
+
+开发环境默认用本地目录：
+
+```env
+STORAGE_BACKEND=local
+UPLOAD_DIR=./uploads
+```
+
+文件通过 `/uploads/{key}` 访问，只适合本地开发。
+
+生产环境切到阿里云 OSS：
+
+```bash
+uv sync --extra oss
+```
+
+```env
+STORAGE_BACKEND=oss
+OSS_ENDPOINT=https://oss-cn-hangzhou.aliyuncs.com
+OSS_BUCKET=your-bucket
+OSS_ACCESS_KEY_ID=...
+OSS_ACCESS_KEY_SECRET=...
+# 私有桶，读取时生成签名 URL
+OSS_PRIVATE=true
+STORAGE_URL_EXPIRE_SECONDS=3600
+```
+
+要点：
+
+- 数据库只存 object key，不存 URL
+- 私有桶返回的是**有有效期的签名 URL**，不能入库
+- 建议给 bucket 配置 CDN 和生命周期规则
+- `scripts/generate_api_doc.py` 不用改，上传接口会自动出现在文档里
+
 ## 数据加密
 
 ```bash

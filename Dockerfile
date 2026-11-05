@@ -11,7 +11,8 @@ WORKDIR /app
 RUN pip install --no-cache-dir uv==0.8.22
 
 COPY pyproject.toml uv.lock ./
-RUN uv sync --no-dev
+# 生产镜像默认带上 OSS 依赖；本地开发不需要
+RUN uv sync --no-dev --extra oss
 
 COPY . .
 

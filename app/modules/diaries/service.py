@@ -9,10 +9,11 @@ shared       双方   双方   双方
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
+from app.core.storage import get_storage
 from app.modules.couples.models import Couple
 from app.modules.diaries import repository as repo
 from app.modules.diaries.models import Diary
-from app.modules.diaries.schemas import DiaryCreate, DiaryUpdate
+from app.modules.diaries.schemas import DiaryCreate, DiaryOut, DiaryUpdate
 from app.modules.users.models import User
 
 
@@ -90,9 +91,36 @@ async def update(
 
 
 async def delete(session: AsyncSession, couple: Couple, user: User, diary_id: int) -> None:
-    """删除日记。个人视角只有作者能删，共同编辑双方都能删。"""
+    """删除日记。个人视角只有作者能删，共同编辑双方都能删。
+
+    注意：这里不级联删除图片。图片可能被多篇日记引用，
+    而且删除是不可逆操作，交给前端显式调用 DELETE /uploads/{key} 更安全。
+    """
     diary = await get_one(session, couple, diary_id)
     if diary.mode == "personal" and diary.author_id != user.id:
         raise AppError("只能删除自己的日记", code=8003, status_code=403)
     await repo.delete(session, diary)
     await session.commit()
+
+
+def to_out(diary: Diary) -> DiaryOut:
+    """把 ORM 对象转成接口结构。
+
+    数据库里存的是 object key，这里按当前存储配置生成可访问 URL。
+    私有 OSS 桶生成的是有有效期的签名 URL，所以不要把 image_urls 入库。
+    """
+    storage = get_storage()
+    return DiaryOut(
+        id=diary.id,
+        event_id=diary.event_id,
+        mode=diary.mode,
+        title=diary.title,
+        content=diary.content,
+        mood_tags=diary.mood_tags,
+        location=diary.location,
+        images=diary.images,
+        image_urls=[storage.build_url(key) for key in diary.images],
+        author_id=diary.author_id,
+        created_at=diary.created_at,
+        updated_at=diary.updated_at,
+    )

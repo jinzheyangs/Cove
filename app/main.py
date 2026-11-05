@@ -7,10 +7,12 @@
 """
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
+from fastapi.staticfiles import StaticFiles
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy import text
 
@@ -24,6 +26,7 @@ from app.core.middleware import (
     RequestContextMiddleware,
     SecurityHeadersMiddleware,
 )
+from app.core.storage import validate_storage_config
 from app.core.tracing import setup_tracing
 from app.modules.audit.router import router as audit_router
 from app.modules.bills.router import router as bills_router
@@ -40,6 +43,7 @@ from app.modules.privacy.router import router as privacy_router
 from app.modules.secrets.router import router as secrets_router
 from app.modules.simta.router import router as simta_router
 from app.modules.todos.router import router as todos_router
+from app.modules.uploads.router import router as uploads_router
 from app.modules.users.router import auth_router, users_router
 
 # 所有业务接口统一带版本前缀，方便以后做不兼容升级
@@ -57,6 +61,7 @@ async def lifespan(app: FastAPI):
     关闭：释放数据库连接池
     """
     ensure_configured()
+    validate_storage_config()
     yield
     await engine.dispose()
 
@@ -82,6 +87,12 @@ app.add_middleware(RequestContextMiddleware)
 # 统一异常格式：{code, message, data}
 register_exception_handlers(app)
 
+# 本地存储模式把上传目录挂成静态资源，方便开发时直接预览图片。
+# 生产环境用 OSS，不会走到这里。
+if settings.STORAGE_BACKEND == "local":
+    Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
+    app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
+
 # ---- 业务路由 ----------------------------------------------------------
 app.include_router(auth_router, prefix=API_PREFIX)
 app.include_router(users_router, prefix=API_PREFIX)
@@ -100,6 +111,7 @@ app.include_router(daily_router, prefix=API_PREFIX)
 app.include_router(simta_router, prefix=API_PREFIX)
 app.include_router(privacy_router, prefix=API_PREFIX)
 app.include_router(notifications_router, prefix=API_PREFIX)
+app.include_router(uploads_router, prefix=API_PREFIX)
 
 
 # 必须在 app 和路由都配置好之后接入，否则部分路由不会被插桩

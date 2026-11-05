@@ -3298,6 +3298,101 @@
         ]
       }
     },
+    "/api/v1/uploads/diary-image": {
+      "post": {
+        "tags": [
+          "uploads"
+        ],
+        "summary": "Upload Diary Image",
+        "description": "上传一张日记图片。\n\n前端拿到返回的 `key` 后，把它放进日记的 `images` 数组；\n`url` 只用于预览，不要存进数据库。",
+        "operationId": "upload_diary_image_api_v1_uploads_diary_image_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_diary_image_api_v1_uploads_diary_image_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_UploadOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/uploads/{key}": {
+      "delete": {
+        "tags": [
+          "uploads"
+        ],
+        "summary": "Delete Upload",
+        "description": "删除当前关系内的一张图片。key 必须属于当前 couple。",
+        "operationId": "delete_upload_api_v1_uploads__key__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_NoneType_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health",
@@ -3806,6 +3901,21 @@
         "title": "BindRequest",
         "description": "用邀请码绑定。\n\n长度放宽到 4-12，容忍客户端传小写或带空格，\nservice 里会统一 strip + upper。"
       },
+      "Body_upload_diary_image_api_v1_uploads_diary_image_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "JPEG / PNG / WebP，最大 10MB"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_diary_image_api_v1_uploads_diary_image_post"
+      },
       "CategoryStat": {
         "properties": {
           "category": {
@@ -4105,6 +4215,13 @@
             "type": "array",
             "title": "Images"
           },
+          "image_urls": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Image Urls"
+          },
           "author_id": {
             "type": "integer",
             "title": "Author Id"
@@ -4135,7 +4252,7 @@
           "updated_at"
         ],
         "title": "DiaryOut",
-        "description": "日记详情。content 返回时已解密。"
+        "description": "日记详情。content 返回时已解密。\n\n图片相关有两个字段：\n- `images`：数据库里的 object key，编辑时应原样回传\n- `image_urls`：当前可访问的地址，只用于展示，不要入库"
       },
       "DiaryUpdate": {
         "properties": {
@@ -4854,6 +4971,32 @@
         },
         "type": "object",
         "title": "Envelope[UnreadCountOut]"
+      },
+      "Envelope_UploadOut_": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 0
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "success"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UploadOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "Envelope[UploadOut]"
       },
       "Envelope_UserOut_": {
         "properties": {
@@ -6572,6 +6715,35 @@
         ],
         "title": "UnreadCountOut",
         "description": "未读数。前端可用来渲染红点。"
+      },
+      "UploadOut": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "url",
+          "size",
+          "content_type"
+        ],
+        "title": "UploadOut",
+        "description": "上传成功后的结果。\n\n前端应该把 `key` 存进日记的 images 数组，\n展示时用 `url`；不要反过来把 url 存进数据库。"
       },
       "UserOut": {
         "properties": {

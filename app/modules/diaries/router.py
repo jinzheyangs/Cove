@@ -19,7 +19,7 @@ async def create(
 ) -> Envelope[DiaryOut]:
     """新建日记。写同一件事时两个人传同一个 event_id。"""
     diary = await service.create(session, couple, user, body)
-    return Envelope(data=DiaryOut.model_validate(diary))
+    return Envelope(data=service.to_out(diary))
 
 
 @router.get("", response_model=Envelope[list[DiaryOut]])
@@ -38,7 +38,7 @@ async def list_diaries(
     diaries = await service.list_diaries(
         session, couple, mode=mode, event_id=event_id, limit=limit, offset=offset
     )
-    return Envelope(data=[DiaryOut.model_validate(d) for d in diaries])
+    return Envelope(data=[service.to_out(d) for d in diaries])
 
 
 @router.get("/{diary_id}", response_model=Envelope[DiaryOut])
@@ -46,7 +46,8 @@ async def get_one(
     diary_id: int, couple: CurrentCouple, session: SessionDep
 ) -> Envelope[DiaryOut]:
     """读取单篇。只能读到本关系内的日记。"""
-    return Envelope(data=DiaryOut.model_validate(await service.get_one(session, couple, diary_id)))
+    diary = await service.get_one(session, couple, diary_id)
+    return Envelope(data=service.to_out(diary))
 
 
 @router.put("/{diary_id}", response_model=Envelope[DiaryOut])
@@ -59,7 +60,7 @@ async def update(
 ) -> Envelope[DiaryOut]:
     """部分更新。个人视角只有作者能改。"""
     diary = await service.update(session, couple, user, diary_id, body)
-    return Envelope(data=DiaryOut.model_validate(diary))
+    return Envelope(data=service.to_out(diary))
 
 
 @router.delete("/{diary_id}", response_model=Envelope[None])
