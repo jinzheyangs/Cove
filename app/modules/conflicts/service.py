@@ -1,6 +1,8 @@
 """业务层：争吵模式、伤害熔断与强制复盘。
 
-熔断只提示、不判定对错，也不阻断发送——被系统指责只会让冲突升级。
+设计原则：
+- 熔断只提示、不判定对错，也不阻断发送——被系统指责只会让冲突升级
+- 复盘是关闭会话的前置条件，但不强制立即写：卡在生气时只会产出假话
 """
 
 from datetime import UTC, datetime
@@ -15,6 +17,7 @@ from app.modules.couples.models import Couple
 from app.modules.users.models import User
 
 # 极端人身攻击词。宁可少判，也不要误伤正常表达。
+# 关键词表是最低成本的方案；未来可以换成小模型，但不应由系统判定对错。
 _ATTACK_WORDS = (
     "废物",
     "垃圾",
@@ -35,14 +38,25 @@ GENTLE_PROMPT = (
 
 
 def contains_attack(text: str) -> bool:
+    """是否命中伤害词。
+
+    纯字符串匹配，不做语义判断：
+    误判的代价（指责用户）比漏判更高，所以宁可选保守的词表。
+    """
     return any(word in text for word in _ATTACK_WORDS)
 
 
 def _couple_user_ids(couple: Couple) -> list[int]:
+    """关系里的两个人。"""
     return [couple.user1_id, couple.user2_id]
 
 
 async def start(session: AsyncSession, couple: Couple) -> ConflictSession:
+    """发起一次争吵会话。
+
+    同一时间只允许一个未关闭的会话，
+    避免多个会话并行导致复盘和上下文混乱。
+    """
     existing = await repo.get_active_session(session, couple.id)
     if existing is not None:
         raise AppError("已经有一个进行中的对话", code=12001, status_code=409)
@@ -56,6 +70,14 @@ async def start(session: AsyncSession, couple: Couple) -> ConflictSession:
 async def send_message(
     session: AsyncSession, couple: Couple, user: User, session_id: int, content: str
 ) -> tuple[ConflictMessage, str | None]:
+    """发送一条消息。
+
+    命中伤害词时只返回一句温和提示（gentle_prompt），
+    消息照常保存、照常展示，不阻断交流。
+
+    Returns:
+        (消息, 提示文案或 None)
+    """
     conflict = await repo.get_session(session, session_id)
     if conflict is None or conflict.couple_id != couple.id:
         raise AppError("对话不存在", code=12002, status_code=404)
@@ -76,6 +98,7 @@ async def send_message(
 
 
 async def cool(session: AsyncSession, couple: Couple, session_id: int) -> ConflictSession:
+    """进入冷静期。只允许从 ongoing 转。"""
     conflict = await repo.get_session(session, session_id)
     if conflict is None or conflict.couple_id != couple.id:
         raise AppError("对话不存在", code=12002, status_code=404)
@@ -89,6 +112,10 @@ async def cool(session: AsyncSession, couple: Couple, session_id: int) -> Confli
 
 
 async def end(session: AsyncSession, couple: Couple, session_id: int) -> ConflictSession:
+    """结束交流，进入复盘阶段。
+
+    结束后不能再发消息，必须先完成复盘才能关闭会话。
+    """
     conflict = await repo.get_session(session, session_id)
     if conflict is None or conflict.couple_id != couple.id:
         raise AppError("对话不存在", code=12002, status_code=404)
@@ -110,6 +137,11 @@ async def submit_review(
     want: str,
     heard: str,
 ) -> ConflictSession:
+    """提交复盘。
+
+    同一个人重复提交会覆盖上一次（方便修改措辞）。
+    双方都提交后，会话自动关闭。
+    """
     conflict = await repo.get_session(session, session_id)
     if conflict is None or conflict.couple_id != couple.id:
         raise AppError("对话不存在", code=12002, status_code=404)
@@ -144,6 +176,10 @@ async def submit_review(
 async def get_detail(
     session: AsyncSession, couple: Couple, session_id: int
 ) -> SessionDetailOut:
+    """会话详情：状态 + 消息 + 复盘。
+
+    消息和复盘都是解密后的明文。
+    """
     conflict = await repo.get_session(session, session_id)
     if conflict is None or conflict.couple_id != couple.id:
         raise AppError("对话不存在", code=12002, status_code=404)

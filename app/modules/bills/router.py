@@ -1,3 +1,8 @@
+"""恋爱账本的 HTTP 接口。
+
+所有读取接口都会自动过滤掉对方的隐私支出。
+"""
+
 from typing import Annotated
 
 from fastapi import APIRouter, Query
@@ -15,6 +20,7 @@ router = APIRouter(prefix="/bills", tags=["bills"])
 async def create(
     body: BillCreate, user: CurrentUser, couple: CurrentCouple, session: SessionDep
 ) -> Envelope[BillOut]:
+    """记一笔支出或付出。"""
     bill = await service.create(session, couple, user, body)
     return Envelope(data=BillOut.model_validate(bill))
 
@@ -29,6 +35,7 @@ async def list_bills(
     ] = None,
     scope: Annotated[str | None, Query(pattern="^(shared|personal)$")] = None,
 ) -> Envelope[list[BillOut]]:
+    """列出可见账目，可按类型和共同/个人过滤。"""
     bills = await service.list_visible(
         session, couple, user, bill_type=type, scope=scope
     )
@@ -39,6 +46,7 @@ async def list_bills(
 async def stats(
     user: CurrentUser, couple: CurrentCouple, session: SessionDep
 ) -> Envelope[BillStats]:
+    """统计汇总。只给共同视角，不提供个人对比。"""
     return Envelope(data=await service.stats(session, couple, user))
 
 
@@ -50,6 +58,7 @@ async def update(
     couple: CurrentCouple,
     session: SessionDep,
 ) -> Envelope[BillOut]:
+    """更新自己记的账。"""
     bill = await service.update(session, couple, user, bill_id, body)
     return Envelope(data=BillOut.model_validate(bill))
 
@@ -58,5 +67,6 @@ async def update(
 async def delete(
     bill_id: int, user: CurrentUser, couple: CurrentCouple, session: SessionDep
 ) -> Envelope[None]:
+    """删除自己记的账。"""
     await service.delete(session, couple, user, bill_id)
     return Envelope()

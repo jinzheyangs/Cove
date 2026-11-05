@@ -1,3 +1,13 @@
+"""争吵模式的 HTTP 接口。
+
+流程：
+    POST /conflicts                 发起
+    POST /conflicts/{id}/messages   交流（命中伤害词会附带提示）
+    POST /conflicts/{id}/cool       冷静期
+    POST /conflicts/{id}/end        结束交流，进入复盘
+    POST /conflicts/{id}/review     提交复盘（双方都提交后自动关闭）
+"""
+
 from fastapi import APIRouter
 
 from app.core.deps import CurrentUser, SessionDep
@@ -18,6 +28,7 @@ router = APIRouter(prefix="/conflicts", tags=["conflicts"])
 
 @router.post("", response_model=Envelope[SessionOut])
 async def start(couple: CurrentCouple, session: SessionDep) -> Envelope[SessionOut]:
+    """发起会话。同一时间只能有一个未关闭的会话。"""
     conflict = await service.start(session, couple)
     return Envelope(data=SessionOut.model_validate(conflict))
 
@@ -26,6 +37,7 @@ async def start(couple: CurrentCouple, session: SessionDep) -> Envelope[SessionO
 async def detail(
     session_id: int, couple: CurrentCouple, session: SessionDep
 ) -> Envelope[SessionDetailOut]:
+    """查看会话详情：消息和复盘。"""
     return Envelope(data=await service.get_detail(session, couple, session_id))
 
 
@@ -37,6 +49,11 @@ async def send_message(
     couple: CurrentCouple,
     session: SessionDep,
 ) -> Envelope[MessageSentOut]:
+    """发送消息。
+
+    命中伤害词时响应里会带 gentle_prompt，
+    但消息本身仍然发送成功——不阻断。
+    """
     message, prompt = await service.send_message(
         session, couple, user, session_id, body.content
     )
@@ -51,6 +68,7 @@ async def send_message(
 async def cool(
     session_id: int, couple: CurrentCouple, session: SessionDep
 ) -> Envelope[SessionOut]:
+    """进入冷静期。"""
     conflict = await service.cool(session, couple, session_id)
     return Envelope(data=SessionOut.model_validate(conflict))
 
@@ -59,6 +77,7 @@ async def cool(
 async def end(
     session_id: int, couple: CurrentCouple, session: SessionDep
 ) -> Envelope[SessionOut]:
+    """结束交流，进入复盘阶段。"""
     conflict = await service.end(session, couple, session_id)
     return Envelope(data=SessionOut.model_validate(conflict))
 
@@ -71,6 +90,10 @@ async def submit_review(
     couple: CurrentCouple,
     session: SessionDep,
 ) -> Envelope[SessionOut]:
+    """提交复盘。
+
+    两个问题都必须回答。双方都提交后会话状态变为 closed。
+    """
     conflict = await service.submit_review(
         session,
         couple,

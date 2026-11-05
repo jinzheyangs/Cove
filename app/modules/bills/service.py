@@ -20,6 +20,12 @@ _ZERO = Decimal("0")
 async def create(
     session: AsyncSession, couple: Couple, payer: User, body: BillCreate
 ) -> Bill:
+    """新增账目。
+
+    两条互斥规则：
+    - 金钱支出必须有金额
+    - 非金钱付出不能有金额（不把陪伴和情绪劳动数字化）
+    """
     if body.type == "money":
         if body.amount is None or body.amount <= 0:
             raise AppError("金额类支出必须填写金额", code=10001, status_code=400)
@@ -50,12 +56,17 @@ async def list_visible(
     bill_type: str | None = None,
     scope: str | None = None,
 ) -> list[Bill]:
+    """列出当前用户可见的账目。"""
     return await repo.list_visible(
         session, couple.id, viewer.id, bill_type=bill_type, scope=scope
     )
 
 
 async def _get_own(session: AsyncSession, couple: Couple, user: User, bill_id: int) -> Bill:
+    """取出自己记的账。
+
+    只能改/删自己记的，避免篡改对方的数据。
+    """
     bill = await repo.get(session, bill_id)
     if bill is None or bill.couple_id != couple.id:
         raise AppError("记录不存在", code=10003, status_code=404)
@@ -67,6 +78,7 @@ async def _get_own(session: AsyncSession, couple: Couple, user: User, bill_id: i
 async def update(
     session: AsyncSession, couple: Couple, user: User, bill_id: int, body: BillCreate
 ) -> Bill:
+    """整体更新一条账目（不是部分更新）。"""
     bill = await _get_own(session, couple, user, bill_id)
     bill.amount = body.amount
     bill.category = body.category
@@ -80,12 +92,19 @@ async def update(
 
 
 async def delete(session: AsyncSession, couple: Couple, user: User, bill_id: int) -> None:
+    """删除自己记的账。"""
     bill = await _get_own(session, couple, user, bill_id)
     await repo.delete(session, bill)
     await session.commit()
 
 
 async def stats(session: AsyncSession, couple: Couple, viewer: User) -> BillStats:
+    """汇总统计。
+
+    在 Python 里聚合是为了代码直观；数据量大了可以改成 SQL 聚合。
+    更重要的是：返回结构里没有「个人占比」，
+    避免这个功能变成谁付出更多的比较工具。
+    """
     bills = await repo.list_visible(session, couple.id, viewer.id)
 
     money_total = _ZERO
@@ -104,6 +123,7 @@ async def stats(session: AsyncSession, couple: Couple, viewer: User) -> BillStat
                 personal_total += amount
             by_category[bill.category] = by_category.get(bill.category, _ZERO) + amount
         else:
+            # 非金钱付出只计数，不求和
             non_money[bill.type] = non_money.get(bill.type, 0) + 1
 
     return BillStats(
@@ -113,6 +133,7 @@ async def stats(session: AsyncSession, couple: Couple, viewer: User) -> BillStat
         personal_total=personal_total,
         by_category=[
             CategoryStat(category=c, total=t)
+            # 按金额从大到小，前端直接照着渲染
             for c, t in sorted(by_category.items(), key=lambda item: item[1], reverse=True)
         ],
         non_money_counts=non_money,
