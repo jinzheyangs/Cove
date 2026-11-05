@@ -11,6 +11,7 @@ from opentelemetry import trace
 from app.core.config import settings
 from app.core.db import SessionLocal
 from app.core.logging import configure_logging
+from app.core.metrics import COIN_RECONCILE_MISMATCHES
 from app.core.tracing import setup_tracing
 from app.modules.coins import service as coin_service
 from app.modules.secrets import service as secret_service
@@ -32,6 +33,7 @@ async def reconcile_coins(ctx: dict) -> int:
         async with SessionLocal() as session:
             mismatches = await coin_service.reconcile(session)
 
+        COIN_RECONCILE_MISMATCHES.set(len(mismatches))
         if mismatches:
             logger.error("金币对账不一致 (user_id, cached, expected): %s", mismatches)
         else:

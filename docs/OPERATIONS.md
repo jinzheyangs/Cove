@@ -70,6 +70,32 @@ Redis 不可用时限流会放行（fail open），不会拖垮服务。
 
 排查顺序：请求 ID → 路径 → 状态码 → 耗时 → 异常栈。
 
+## 告警
+
+```bash
+docker compose --profile monitoring up -d
+# Prometheus  http://localhost:9090
+# Alertmanager http://localhost:9093
+```
+
+规则在 `deploy/prometheus/alerts.yml`：
+
+| 告警 | 条件 |
+|---|---|
+| `CoveApiDown` | 指标抓取失败 2 分钟 |
+| `CoveHigh5xxRate` | 5xx 比例 > 1%，持续 5 分钟 |
+| `CoveHighLatency` | P95 > 1s，持续 10 分钟 |
+| `CoveAiCircuitOpen` | AI 熔断器打开 1 分钟 |
+| `CoveAiHighFailureRate` | AI 失败率 > 20%，持续 10 分钟 |
+| `CoveCoinReconcileMismatch` | 对账不一致账户数 > 0 |
+
+通知渠道在 `deploy/alertmanager/alertmanager.yml`。
+**钉钉/飞书不能直接填机器人地址**，需要先部署一个格式转换服务（如
+`prometheus-webhook-dingtalk`），否则收到的消息是乱格式。
+
+如果设置了 `METRICS_TOKEN`，Prometheus 抓取会被 403 拒绝。
+要么留空（依赖内网隔离），要么给 Prometheus 配上请求头。
+
 ## 链路追踪
 
 默认关闭。开启后 FastAPI / SQLAlchemy / Redis / httpx 自动打点，

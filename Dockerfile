@@ -5,9 +5,10 @@ ENV PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy
 
-COPY --from=ghcr.io/astral-sh/uv:0.8.22 /uv /uvx /bin/
-
 WORKDIR /app
+
+# 从 PyPI 安装 uv，避免依赖 ghcr.io（部分网络环境拉不到）
+RUN pip install --no-cache-dir uv==0.8.22
 
 COPY pyproject.toml uv.lock ./
 RUN uv sync --no-dev

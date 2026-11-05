@@ -59,6 +59,22 @@ services:
       timeout: 5s
       retries: 10
 
+  prometheus:
+    image: prom/prometheus:latest
+    profiles: ["monitoring"]
+    volumes:
+      - ./deploy/prometheus:/etc/prometheus:ro
+    ports:
+      - "9090:9090"
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    profiles: ["monitoring"]
+    volumes:
+      - ./deploy/alertmanager:/etc/alertmanager:ro
+    ports:
+      - "9093:9093"
+
   jaeger:
     # 生产环境建议固定版本；latest 是为了兼容部分镜像站
     image: jaegertracing/all-in-one:latest

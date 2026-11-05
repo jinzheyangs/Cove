@@ -1,0 +1,25 @@
+route:
+  receiver: "default"
+  group_by: ["alertname"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  # 通用 webhook。钉钉 / 飞书需要先部署一个转换服务：
+  #   钉钉：prometheus-webhook-dingtalk
+  #   飞书：alertmanager-feishu 之类的桥接
+  # 直接把飞书机器人地址填在这里是不行的，格式不兼容。
+  - name: "default"
+    webhook_configs:
+      - url: "http://host.docker.internal:5001/webhook"
+        send_resolved: true
+
+  # 邮件示例（需要 SMTP）：
+  # - name: "email"
+  #   email_configs:
+  #     - to: "ops@example.com"
+  #       from: "alertmanager@example.com"
+  #       smarthost: "smtp.example.com:587"
+  #       auth_username: "alertmanager@example.com"
+  #       auth_password: "REPLACE_ME"
