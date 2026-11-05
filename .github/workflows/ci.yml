@@ -23,10 +23,21 @@ jobs:
           --health-timeout 5s
           --health-retries 10
 
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     env:
       ENV: ci
       DATABASE_URL: postgresql+asyncpg://cove:cove_dev_pass@localhost:5432/cove
       TEST_DATABASE_URL: postgresql+asyncpg://cove:cove_dev_pass@localhost:5432/cove_test
+      TEST_REDIS_URL: redis://localhost:6379/15
       JWT_SECRET: ci-only-secret
       RATE_LIMIT_ENABLED: "false"
 

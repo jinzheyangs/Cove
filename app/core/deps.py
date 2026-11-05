@@ -1,6 +1,15 @@
 """FastAPI 依赖：会话与当前用户。
 
 `CurrentUser` / `SessionDep` 是所有业务路由的入口依赖。
+
+请求链路：
+1. 请求头 `Authorization: Bearer eyJxxx`
+2. `CurrentUser` → 调用 `get_current_user`
+3. 提取 token → decode_access_token（JWT_SECRET 验签）→ user_id
+4. 拿到 `SessionDep`（AsyncSession，底层走连接池 engine）→ repo 查 User
+5. 校验通过，绑定日志上下文，把 user 传给路由
+6. 路由拿 user、session，调用 service/repository 做业务
+   （比如加密保存日记，调用 AESGCM 加密函数）
 """
 
 from typing import Annotated

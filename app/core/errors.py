@@ -5,6 +5,12 @@
 
 `code` 是业务错误码（401/1001/2001...），HTTP 状态码单独看 `status_code`。
 客户端通常只需要判断 `code`。
+
+异常处理链路：
+1. 请求进来 → 进入 `CurrentUser` 依赖 `get_current_user`
+2. 没有 token → `raise AppError("未登录", code=401, status_code=401)`
+3. FastAPI 触发全局 AppError 处理器
+4. 输出标准化 JSON：`{"code":401,"message":"未登录","data":null}`
 """
 
 import structlog

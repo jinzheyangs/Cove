@@ -51,6 +51,8 @@ services:
 
   redis:
     image: redis:7-alpine
+    ports:
+      - "56379:6379"         # 仅开发用；生产环境不要映射
     volumes:
       - redisdata:/data
     healthcheck:

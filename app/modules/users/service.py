@@ -57,7 +57,10 @@ async def authenticate(session: AsyncSession, phone: str, password: str) -> User
     limiter = get_limiter()
     fail_key = f"login_fail:{phone}"
 
-    if await limiter.count(fail_key) >= settings.LOGIN_MAX_ATTEMPTS:
+    if (
+        await limiter.count(fail_key, settings.LOGIN_LOCK_SECONDS)
+        >= settings.LOGIN_MAX_ATTEMPTS
+    ):
         raise AppError("尝试次数过多，请稍后再试", code=1003, status_code=429)
 
     user = await repo.get_by_phone(session, phone)

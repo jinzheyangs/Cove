@@ -46,22 +46,26 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             client_ip=request.client.host if request.client else None,
         )
 
-        started = time.perf_counter()
+        started = time.perf_counter()   #记录请求开始时刻
         try:
+            # 把请求继续往下传递：剩余中间件 -> 依赖 -> 业务路由
             response = await call_next(request)
         except Exception:
             # 未捕获异常也要计入指标，否则 5xx 告警会漏
             duration_ms = round((time.perf_counter() - started) * 1000, 2)
-            route = request.scope.get("route")
+            route = request.scope.get("route")  #从 scope 拿到路由对象；
             path = getattr(route, "path", request.url.path)
+            # REQUEST_COUNT 计数器 +1，状态标记为 "500"
             REQUEST_COUNT.labels(request.method, path, "500").inc()
+            # 记录本次耗时（单位秒）
             REQUEST_LATENCY.labels(request.method, path).observe(duration_ms / 1000)
+            # 打印日志，并自动输出完整堆栈
             logger.exception("request.failed", duration_ms=duration_ms)
             raise
 
-        duration_ms = round((time.perf_counter() - started) * 1000, 2)
+        duration_ms = round((time.perf_counter() - started) * 1000, 2)  #计算耗时毫秒；
         # 路由模板（如 /api/v1/secrets/{secret_id}），保证指标基数可控
-        route = request.scope.get("route")
+        route = request.scope.get("route")      #再次拿路由模板 path，不是带真实 ID 的 URL！
         path = getattr(route, "path", request.url.path)
         REQUEST_COUNT.labels(request.method, path, str(response.status_code)).inc()
         REQUEST_LATENCY.labels(request.method, path).observe(duration_ms / 1000)
