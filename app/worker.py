@@ -1,6 +1,11 @@
 """ARQ 后台任务 worker。
 
-启动方式：arq app.worker.WorkerSettings
+启动方式：
+    arq app.worker.WorkerSettings
+
+当前只有两个定时任务：
+- 每天 03:17 金币对账
+- 每天 03:41 清理燃尽期已过的秘密内容
 """
 
 import structlog
@@ -16,6 +21,7 @@ from app.core.tracing import setup_tracing
 from app.modules.coins import service as coin_service
 from app.modules.secrets import service as secret_service
 
+# worker 是独立进程，日志和追踪都要单独初始化
 configure_logging()
 setup_tracing()
 logger = structlog.get_logger("worker")
@@ -23,18 +29,27 @@ tracer = trace.get_tracer("cove.worker")
 
 
 async def ping(ctx: dict) -> str:
-    """最小连通性任务。"""
+    """最小连通性任务，用于验证 worker 和 Redis 正常。"""
     return "pong"
 
 
 async def reconcile_coins(ctx: dict) -> int:
-    """每天对账一次：余额缓存必须和流水一致。"""
+    """金币对账。
+
+    从流水重算每个账户的应有余额，和缓存余额比对。
+    结果写入 Prometheus 指标，告警规则见 deploy/prometheus/alerts.yml。
+
+    Returns:
+        不一致的账户数量，0 表示全部正确。
+    """
     with tracer.start_as_current_span("worker.reconcile_coins"):
+        # cron 任务没有请求上下文，需要自己开会话
         async with SessionLocal() as session:
             mismatches = await coin_service.reconcile(session)
 
         COIN_RECONCILE_MISMATCHES.set(len(mismatches))
         if mismatches:
+            # 只记录 id 和数字，不打印任何隐私内容
             logger.error("金币对账不一致 (user_id, cached, expected): %s", mismatches)
         else:
             logger.info("金币对账通过")
@@ -42,7 +57,14 @@ async def reconcile_coins(ctx: dict) -> int:
 
 
 async def purge_burned_secrets(ctx: dict) -> int:
-    """燃尽期结束后，把阅后即焚的秘密内容清空。"""
+    """清理燃尽期已过的秘密内容。
+
+    摘取时只标记 burned，内容保留 24 小时；
+    这里负责把超过宽限期的正文清空。
+
+    Returns:
+        被清理的记录数。
+    """
     with tracer.start_as_current_span("worker.purge_burned_secrets"):
         async with SessionLocal() as session:
             count = await secret_service.purge_burned(session)
@@ -52,7 +74,15 @@ async def purge_burned_secrets(ctx: dict) -> int:
 
 
 class WorkerSettings:
+    """ARQ 的启动配置。
+
+    注意：cron 任务在每个 worker 实例上都会运行。
+    如果以后把 worker 扩成多实例，需要把定时任务拆到单独进程，
+    否则会对账多次、清理多次（虽然幂等，但没必要）。
+    """
+
     functions = [ping]
+    # 错开整点执行，避免和其他系统的定时任务撞车
     cron_jobs = [
         cron(reconcile_coins, hour=3, minute=17),
         cron(purge_burned_secrets, hour=3, minute=41),
