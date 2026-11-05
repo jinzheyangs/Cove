@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
+from app.core.queue import enqueue
 from app.modules.conflicts import repository as repo
 from app.modules.conflicts.models import ConflictMessage, ConflictSession
 from app.modules.conflicts.schemas import SessionDetailOut
@@ -152,14 +153,16 @@ async def submit_review(
     if existing is not None:
         existing.want_to_be_understood = want
         existing.heard_partner_need = heard
+        review_id = existing.id
     else:
-        await repo.add_review(
+        review = await repo.add_review(
             session,
             session_id=conflict.id,
             user_id=user.id,
             want=want,
             heard=heard,
         )
+        review_id = review.id
 
     await session.flush()
     submitted = await repo.count_reviews(
@@ -170,6 +173,8 @@ async def submit_review(
 
     await session.commit()
     await session.refresh(conflict)
+    # 复盘是模拟TA 的重要上下文，提交后异步重建索引
+    await enqueue("index_review", review_id)
     return conflict
 
 

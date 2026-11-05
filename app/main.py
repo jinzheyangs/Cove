@@ -26,6 +26,7 @@ from app.core.middleware import (
     RequestContextMiddleware,
     SecurityHeadersMiddleware,
 )
+from app.core.queue import close_pool
 from app.core.storage import validate_storage_config
 from app.core.tracing import setup_tracing
 from app.modules.audit.router import router as audit_router
@@ -63,6 +64,7 @@ async def lifespan(app: FastAPI):
     ensure_configured()
     validate_storage_config()
     yield
+    await close_pool()
     await engine.dispose()
 
 

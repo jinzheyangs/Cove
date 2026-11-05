@@ -88,6 +88,8 @@ services:
 
   chroma:
     image: chromadb/chroma
+    ports:
+      - "58000:8000"         # 仅开发用；生产环境不要映射
     volumes:
       - chromadata:/chroma/chroma
     environment:

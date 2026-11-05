@@ -18,6 +18,7 @@ from app.core.db import SessionLocal
 from app.core.logging import configure_logging
 from app.core.metrics import COIN_RECONCILE_MISMATCHES
 from app.core.tracing import setup_tracing
+from app.modules.ai import indexing
 from app.modules.coins import service as coin_service
 from app.modules.secrets import service as secret_service
 
@@ -73,6 +74,38 @@ async def purge_burned_secrets(ctx: dict) -> int:
         return count
 
 
+async def index_diary(ctx: dict, diary_id: int) -> None:
+    """重建一篇日记的向量索引。"""
+    with tracer.start_as_current_span("worker.index_diary"):
+        async with SessionLocal() as session:
+            await indexing.index_diary(session, diary_id)
+
+
+async def delete_diary_vectors(ctx: dict, diary_id: int) -> None:
+    """删除一篇日记的向量索引。"""
+    with tracer.start_as_current_span("worker.delete_diary_vectors"):
+        async with SessionLocal() as session:
+            await indexing.delete_diary_vectors(session, diary_id)
+
+
+async def index_review(ctx: dict, review_id: int) -> None:
+    """重建一份复盘的向量索引。"""
+    with tracer.start_as_current_span("worker.index_review"):
+        async with SessionLocal() as session:
+            await indexing.index_review(session, review_id)
+
+
+async def delete_user_vectors(ctx: dict, couple_id: int | None, user_id: int) -> None:
+    """删除某个用户的向量。
+
+    撤销模拟TA 授权时传 couple_id；
+    注销账号时 couple_id 为空，按用户全局删除。
+    """
+    with tracer.start_as_current_span("worker.delete_user_vectors"):
+        async with SessionLocal() as session:
+            await indexing.delete_user_vectors(session, couple_id, user_id)
+
+
 class WorkerSettings:
     """ARQ 的启动配置。
 
@@ -81,7 +114,13 @@ class WorkerSettings:
     否则会对账多次、清理多次（虽然幂等，但没必要）。
     """
 
-    functions = [ping]
+    functions = [
+        ping,
+        index_diary,
+        delete_diary_vectors,
+        index_review,
+        delete_user_vectors,
+    ]
     # 错开整点执行，避免和其他系统的定时任务撞车
     cron_jobs = [
         cron(reconcile_coins, hour=3, minute=17),

@@ -3,6 +3,7 @@ import os
 # 测试不依赖 Redis / Jaeger：必须在导入 app 之前关掉
 os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 os.environ.setdefault("OTEL_ENABLED", "false")
+os.environ.setdefault("QUEUE_ENABLED", "false")
 
 import asyncpg
 import pytest_asyncio

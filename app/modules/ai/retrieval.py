@@ -1,47 +1,48 @@
 """模拟TA 的检索层。
 
-当前实现：从 PostgreSQL 里取对方最近的日记和争吵复盘作为上下文。
-这是可替换的——换成 Chroma + embedding 只需要实现同样签名的函数，
-业务层不用改。
+优先走向量检索（RAG）：
+    用户问题 -> embedding -> Chroma top-k -> 上下文片段
 
-为什么先不接 Chroma：
-向量检索的质量取决于 embedding 模型，而当前模型供应商没有 embedding 接口。
-先用「最近记录」作为上下文，写作质量已经够用，也少一个基础设施。
+以下情况自动退回「最近记录」模式：
+- embedding 未配置
+- Chroma 不可用
+- 检索结果为空
+
+退回逻辑保证：即使 AI 基础设施没配好，模拟TA 仍然能用，
+只是上下文从「语义相关」退化成「最近写的」。
 """
 
+import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
+from app.modules.ai import embeddings, vectorstore
 from app.modules.conflicts.models import ConflictReview, ConflictSession
 from app.modules.diaries.models import Diary
 
-# 上下文预算：太多会稀释重点，也会推高 token 成本
+logger = structlog.get_logger("retrieval")
+
+# 回退模式的预算
 DIARY_LIMIT = 10
 REVIEW_LIMIT = 5
-# 单条记录的截断长度，避免一条长日记吃掉全部预算
 EXCERPT = 200
 
 
 def _excerpt(text: str) -> str:
-    """压缩成一行并截断。
-
-    换行会把 prompt 结构打乱，所以先替换成空格。
-    """
+    """压缩成一行并截断。"""
     text = text.strip().replace("\n", " ")
     return text if len(text) <= EXCERPT else text[:EXCERPT] + "…"
 
 
-async def collect_context(
+async def recent_context(
     session: AsyncSession, couple_id: int, target_user_id: int
 ) -> list[str]:
-    """收集某个用户在关系里留下的痕迹，作为模拟的依据。
+    """回退模式：取对方最近的日记和复盘。
 
     只读取该用户自己写的内容：
     - 日记：作者是 TA
     - 复盘：提交人是 TA
-
-    不读取对方的日记，避免把“我写的东西”混进“TA 的人设”。
-    读取时 EncryptedText 会自动解密，这里拿到的已经是明文。
     """
     fragments: list[str] = []
 
@@ -75,3 +76,34 @@ async def collect_context(
         )
 
     return fragments
+
+
+async def collect_context(
+    session: AsyncSession,
+    couple_id: int,
+    target_user_id: int,
+    query_text: str | None = None,
+) -> list[str]:
+    """收集模拟的上下文。
+
+    Args:
+        query_text: 用户当前说的话。有值时走向量检索，
+            为空或未配置时退回最近记录。
+    """
+    if query_text and embeddings.is_configured():
+        try:
+            vector = await embeddings.embed_one(query_text)
+            documents = await vectorstore.query(
+                couple_id, target_user_id, vector, settings.RAG_TOP_K
+            )
+            if documents:
+                return documents
+            logger.info(
+                "rag.empty_result",
+                couple_id=couple_id,
+                user_id=target_user_id,
+            )
+        except Exception as exc:  # noqa: BLE001 - 检索失败不应阻断对话
+            logger.warning("rag.query_failed", error=repr(exc))
+
+    return await recent_context(session, couple_id, target_user_id)

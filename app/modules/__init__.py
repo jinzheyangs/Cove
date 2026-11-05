@@ -3,6 +3,7 @@
 这里显式导入所有 models，确保 Alembic autogenerate 能看到它们。
 """
 
+from app.modules.ai import models as ai_models  # noqa: F401
 from app.modules.audit import models as audit_models  # noqa: F401
 from app.modules.bills import models as bills_models  # noqa: F401
 from app.modules.coin_applies import models as coin_apply_models  # noqa: F401

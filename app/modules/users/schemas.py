@@ -15,16 +15,16 @@ class RegisterRequest(BaseModel):
     因此它实际上只是一个用户名。
     """
 
-    phone: str = Field(pattern=r"^1[3-9]\d{9}$", description="中国大陆手机号")
-    password: str = Field(min_length=6, max_length=64)
-    nickname: str = Field(min_length=1, max_length=50)
+    phone: str = Field(pattern=r"^1[3-9]\d{9}$", description="中国大陆手机号")  #手机号
+    password: str = Field(min_length=6, max_length=64)   #密码
+    nickname: str = Field(min_length=1, max_length=50)   #昵称
 
 
 class LoginRequest(BaseModel):
     """登录请求。不做格式校验，避免给撞库者额外信息。"""
 
-    phone: str
-    password: str
+    phone: str  #手机号
+    password: str   #密码
 
 
 class UserOut(BaseModel):
@@ -39,8 +39,8 @@ class UserOut(BaseModel):
     id: int
     phone: str
     nickname: str
-    avatar: str | None = None
-    created_at: datetime
+    avatar: str | None = None   #存储oss对象
+    created_at: datetime    #创建时间
 
 
 class TokenOut(BaseModel):
@@ -51,11 +51,12 @@ class TokenOut(BaseModel):
     - expires_in：access token 剩余秒数，前端据此决定何时刷新
     """
 
-    access_token: str
-    refresh_token: str
-    token_type: str = "bearer"
+    access_token: str   #JWT 短时效令牌。前端请求头带上
+    refresh_token: str  #随机字符串，存数据库，可以吊销。只有登录 / 刷新接口才返回一次原始值。
+    token_type: str = "bearer"  #固定常量，告诉前端 Authorization 头的类型。
+    # access_token 还有多少秒过期。前端拿到后自己计时，快过期时调用刷新接口。
     expires_in: int
-    user: UserOut
+    user: UserOut   #嵌套用户信息模型。
 
 
 class RefreshRequest(BaseModel):

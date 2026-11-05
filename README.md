@@ -141,13 +141,47 @@ app/modules/<name>/
 
 运维细节见 [docs/OPERATIONS.md](docs/OPERATIONS.md)。
 
-## 关于检索与模拟TA
+## 模拟TA 的 RAG
 
-`app/modules/ai/retrieval.py` 当前用 PostgreSQL 里的日记与复盘作为上下文，
-接口已经隔离，替换成 Chroma + embedding 时业务层不用改。
+链路：
 
-接入 Chroma 还差一步：需要先确定 embedding 模型
-（DeepSeek 不提供 embedding 接口，可选通义 / 智谱 / 本地 BGE）。
+```
+日记 / 复盘写入
+    ↓ 事务提交后入队（ARQ）
+切片 → embedding → Chroma
+    ↓
+用户提问 → embedding → Chroma top-k（按 couple_id + user_id 过滤）→ prompt → LLM
+```
+
+设计原则：
+
+- **PG 是真相，Chroma 是可重建的索引**；`chunk_index` 表记录映射
+- 内容没变不重新 embedding（`content_hash`）
+- embedding 未配置或 Chroma 不可用时，自动退回「最近日记 + 复盘」
+- 撤销模拟TA 授权、注销账号会删除对应向量
+- 检索只读被模拟者自己的记录，不会混入用户自己的内容
+
+配置（embedding 走 OpenAI 兼容接口，供应商可换）：
+
+```env
+RAG_ENABLED=true
+CHROMA_HOST=chroma
+CHROMA_PORT=8000
+CHROMA_COLLECTION=cove_persona
+RAG_TOP_K=5
+RAG_CHUNK_SIZE=400
+RAG_CHUNK_OVERLAP=50
+
+EMBEDDING_API_KEY=...
+EMBEDDING_BASE_URL=...
+EMBEDDING_MODEL=...
+```
+
+重建某个用户的索引：
+
+```bash
+uv run python scripts/reindex_user.py <couple_id> <user_id>
+```
 
 ## 开发进度
 

@@ -38,9 +38,24 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://cove:cove@postgres:5432/cove"
     REDIS_URL: str = "redis://redis:6379/0"
 
-    # 预留给模拟TA 的向量检索；当前检索仍走 PostgreSQL
+    # ---------------------------------------------------------------- 向量检索
+    # 模拟TA 的 RAG：PG 是真相，Chroma 是可重建的索引
+    RAG_ENABLED: bool = True
     CHROMA_HOST: str = "chroma"
     CHROMA_PORT: int = 8000
+    CHROMA_COLLECTION: str = "cove_persona"
+    RAG_TOP_K: int = 5
+    # 切片长度与重叠，按字符数（中文场景不按 token 切）
+    RAG_CHUNK_SIZE: int = 400
+    RAG_CHUNK_OVERLAP: int = 50
+
+    # embedding 走 OpenAI 兼容接口，供应商可换：
+    # 通义 / 智谱 / 硅基流动 / 本地 vLLM 都支持
+    EMBEDDING_API_KEY: str = ""
+    EMBEDDING_BASE_URL: str = ""
+    EMBEDDING_MODEL: str = ""
+    # 部分模型支持指定维度；0 表示用模型默认值
+    EMBEDDING_DIMENSIONS: int = 0
 
     # ---------------------------------------------------------------- 认证
     # 生产环境必须换成随机值：openssl rand -hex 32
@@ -88,6 +103,10 @@ class Settings(BaseSettings):
     # 同一手机号连续登录失败多少次后锁定
     LOGIN_MAX_ATTEMPTS: int = 5
     LOGIN_LOCK_SECONDS: int = 900
+
+    # ---------------------------------------------------------------- 队列
+    # 测试环境关掉，避免每个写操作都尝试连 Redis
+    QUEUE_ENABLED: bool = True
 
     # ---------------------------------------------------------------- 业务
     # 每人每天最多赠送多少金币，防止一个人无限发币

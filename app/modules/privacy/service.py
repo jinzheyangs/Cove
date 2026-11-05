@@ -6,6 +6,7 @@ from uuid import uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
+from app.core.queue import enqueue
 from app.core.security import hash_password, verify_password
 from app.modules.audit import service as audit_service
 from app.modules.couples import repository as couple_repo
@@ -32,6 +33,8 @@ async def delete_account(session: AsyncSession, user: User, password: str) -> No
 
     # 1. 解除当前关系，但保留历史记录供对方导出
     couple = await couple_repo.get_active_by_user(session, user.id)
+    # 先记下 couple_id：注销后关系已解除，后面清理向量还要用
+    couple_id = couple.id if couple is not None else None
     if couple is not None:
         couple.status = "unbound"
         couple.unbound_at = datetime.now(UTC)
@@ -56,6 +59,10 @@ async def delete_account(session: AsyncSession, user: User, password: str) -> No
         target_id=user.id,
     )
     await session.commit()
+
+    # 删除该用户在向量库里的全部索引。
+    # couple_id 可能为空（注销时已解绑），此时按 user_id 全局删除。
+    await enqueue("delete_user_vectors", couple_id, user.id)
 
 
 # 导出时每类数据保留的字段。显式列出来，避免把内部字段（如 user_id）带出去

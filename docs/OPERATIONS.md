@@ -70,6 +70,45 @@ Redis 不可用时限流会放行（fail open），不会拖垮服务。
 
 排查顺序：请求 ID → 路径 → 状态码 → 耗时 → 异常栈。
 
+## 模拟TA 的向量索引
+
+架构：**PG 存原文，Chroma 存向量**。Chroma 丢了可以从 PG 重建。
+
+```env
+RAG_ENABLED=true
+CHROMA_HOST=chroma
+CHROMA_PORT=8000
+EMBEDDING_API_KEY=...
+EMBEDDING_BASE_URL=...
+EMBEDDING_MODEL=...
+```
+
+写入是异步的：
+
+```
+日记创建/修改/删除、复盘提交
+    ↓ ARQ 入队
+worker 切片 -> embedding -> Chroma
+```
+
+重建索引：
+
+```bash
+uv run python scripts/reindex_user.py <couple_id> <user_id>
+```
+
+什么时候必须重建：
+
+- 更换 embedding 模型（维度可能变了）
+- Chroma 数据丢失或损坏
+- 怀疑索引和原文不一致
+
+注意：
+
+- `chromadata` 卷**不需要备份**，它可以重建
+- 撤销模拟TA 授权、注销账号会自动删除对应向量
+- embedding 没配置时检索会退回「最近记录」，功能仍可用
+
 ## 对象存储
 
 开发环境默认用本地目录：

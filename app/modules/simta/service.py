@@ -9,6 +9,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
+from app.core.queue import enqueue
 from app.modules.ai import client as ai_client
 from app.modules.ai import retrieval
 from app.modules.audit import service as audit_service
@@ -62,6 +63,10 @@ async def set_consent(
         )
     await session.commit()
 
+    # 撤销授权后必须把已经索引的向量删掉，否则数据还留在向量库里
+    if not authorized:
+        await enqueue("delete_user_vectors", couple.id, user.id)
+
 
 async def set_fidelity(
     session: AsyncSession, couple: Couple, user: User, fidelity: str
@@ -108,8 +113,10 @@ async def chat(
     settings = await repo.get_settings(session, couple.id, user.id)
     fidelity = settings.fidelity if settings else "faithful"
 
-    # 检索层是可替换的：以后换成 Chroma 时这里不用改
-    fragments = await retrieval.collect_context(session, couple.id, target_id)
+    # 传当前问题，检索层会优先走向量相似度；未配置时自动退回最近记录
+    fragments = await retrieval.collect_context(
+        session, couple.id, target_id, query_text=message
+    )
     context = "\n".join(fragments) if fragments else "（暂时没有可用的历史记录）"
 
     system = FAITHFUL_PROMPT if fidelity == "faithful" else IDEALIZED_PROMPT

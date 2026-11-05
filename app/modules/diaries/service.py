@@ -9,6 +9,7 @@ shared       双方   双方   双方
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
+from app.core.queue import enqueue
 from app.core.storage import get_storage
 from app.modules.couples.models import Couple
 from app.modules.diaries import repository as repo
@@ -39,6 +40,8 @@ async def create(
     )
     await session.commit()
     await session.refresh(diary)
+    # 事务提交后再入队，避免索引任务读到未提交的数据
+    await enqueue("index_diary", diary.id)
     return diary
 
 
@@ -87,6 +90,8 @@ async def update(
 
     await session.commit()
     await session.refresh(diary)
+    # 内容变了就重建索引；没变时 index_diary 内部会按 hash 跳过
+    await enqueue("index_diary", diary.id)
     return diary
 
 
@@ -99,8 +104,11 @@ async def delete(session: AsyncSession, couple: Couple, user: User, diary_id: in
     diary = await get_one(session, couple, diary_id)
     if diary.mode == "personal" and diary.author_id != user.id:
         raise AppError("只能删除自己的日记", code=8003, status_code=403)
+    diary_id = diary.id
     await repo.delete(session, diary)
     await session.commit()
+    # 同步删除向量索引，避免已删内容还能被检索到
+    await enqueue("delete_diary_vectors", diary_id)
 
 
 def to_out(diary: Diary) -> DiaryOut:
