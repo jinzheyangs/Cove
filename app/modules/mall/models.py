@@ -25,6 +25,7 @@ class MallItem(Base):
     description: Mapped[str | None] = mapped_column(Text)
     price_coins: Mapped[int] = mapped_column(BigInteger)
     approved_price: Mapped[int | None] = mapped_column(BigInteger)
+    max_orders: Mapped[int | None] = mapped_column(BigInteger)
     status: Mapped[str] = mapped_column(
         String(20), default="pending", server_default="pending"
     )

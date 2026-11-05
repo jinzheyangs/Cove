@@ -5,11 +5,14 @@
 `*_locked` 系列不提交事务，供其他模块把「扣币 + 业务写入」放进同一个事务。
 """
 
+from datetime import datetime
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.errors import AppError
 from app.modules.coins import repository as repo
 from app.modules.coins.models import CoinTransaction
@@ -124,6 +127,19 @@ async def gift(
 
     giver_id = giver.id
     recipient_id = couple.user2_id if couple.user1_id == giver_id else couple.user1_id
+
+    # 每日赠送上限，防止一个人无限发币把经济玩坏
+    if settings.DAILY_GIFT_LIMIT > 0:
+        day_start = datetime.now(ZoneInfo("Asia/Shanghai")).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        sent_today = await repo.sum_gifts_since(session, giver_id, day_start)
+        if sent_today + amount > settings.DAILY_GIFT_LIMIT:
+            raise AppError(
+                f"今天最多赠送 {settings.DAILY_GIFT_LIMIT} 金币",
+                code=4004,
+                status_code=429,
+            )
 
     try:
         transaction = await mint_locked(

@@ -23,6 +23,7 @@ async def create_item(
         title=body.title,
         description=body.description,
         price_coins=body.price_coins,
+        max_orders=body.max_orders,
     )
     await session.commit()
     await session.refresh(item)
@@ -110,6 +111,11 @@ async def buy(
         raise AppError("这个商品还没上架", code=7006, status_code=409)
     if item.creator_id == buyer.id:
         raise AppError("不能购买自己上架的商品", code=7007, status_code=400)
+
+    if item.max_orders is not None:
+        ordered = await repo.count_orders(session, item.id)
+        if ordered >= item.max_orders:
+            raise AppError("这件商品已经兑换完了", code=7011, status_code=409)
 
     price = item.approved_price or item.price_coins
     buyer_id = buyer.id

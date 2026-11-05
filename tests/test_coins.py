@@ -100,3 +100,18 @@ async def test_concurrent_spend_never_goes_negative(session, session_factory):
     async with session_factory() as s:
         assert await repo.get_balance(s, a_id) == 40
         assert await repo.recompute_balance(s, a_id) == 40  # 缓存与流水一致
+
+
+async def test_daily_gift_limit(session, monkeypatch):
+    from app.core.config import settings
+
+    a, b, couple = await _seed_couple(session)
+    monkeypatch.setattr(settings, "DAILY_GIFT_LIMIT", 50)
+
+    await coin_service.gift(session, couple, a, 30)
+
+    with pytest.raises(AppError) as exc:
+        await coin_service.gift(session, couple, a, 30)
+
+    assert exc.value.code == 4004
+    assert await repo.get_balance(session, b.id) == 30

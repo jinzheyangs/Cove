@@ -81,3 +81,23 @@ async def test_creator_completes_order(session):
 
     completed = await service.complete_order(session, couple, a, order.id)
     assert completed.status == "completed"
+
+
+async def test_stock_limit(session):
+    a, b, couple = await seed_couple(session)
+    await fund_user(session, couple, b, 100)
+    item = await service.create_item(
+        session,
+        couple,
+        a,
+        ItemCreate(title="限量早餐", price_coins=20, max_orders=1),
+    )
+    await service.approve_item(session, couple, b, item.id)
+
+    await service.buy(session, couple, b, item.id)
+
+    with pytest.raises(AppError) as exc:
+        await service.buy(session, couple, b, item.id)
+
+    assert exc.value.code == 7011
+    assert await coin_repo.get_balance(session, b.id) == 80

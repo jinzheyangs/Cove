@@ -1,6 +1,6 @@
 """数据访问层：商城的所有 SQL 都在这里。"""
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.mall.models import MallItem, MallOrder
@@ -14,6 +14,7 @@ async def create_item(
     title: str,
     description: str | None,
     price_coins: int,
+    max_orders: int | None = None,
 ) -> MallItem:
     item = MallItem(
         couple_id=couple_id,
@@ -21,6 +22,7 @@ async def create_item(
         title=title,
         description=description,
         price_coins=price_coins,
+        max_orders=max_orders,
     )
     session.add(item)
     await session.flush()
@@ -66,6 +68,18 @@ async def create_order(
     session.add(order)
     await session.flush()
     return order
+
+
+async def count_orders(session: AsyncSession, item_id: int) -> int:
+    value = await session.scalar(
+        select(func.count())
+        .select_from(MallOrder)
+        .where(
+            MallOrder.item_id == item_id,
+            MallOrder.status.in_(["pending", "completed"]),
+        )
+    )
+    return int(value or 0)
 
 
 async def get_order_for_update(session: AsyncSession, order_id: int) -> MallOrder | None:

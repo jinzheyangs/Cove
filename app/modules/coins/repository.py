@@ -66,6 +66,19 @@ async def list_transactions(
     return list(await session.scalars(stmt))
 
 
+async def sum_gifts_since(
+    session: AsyncSession, actor_id: int, since: object
+) -> int:
+    value = await session.scalar(
+        select(func.coalesce(func.sum(CoinTransaction.amount), 0)).where(
+            CoinTransaction.actor_id == actor_id,
+            CoinTransaction.type == "gift",
+            CoinTransaction.created_at >= since,
+        )
+    )
+    return int(value or 0)
+
+
 async def list_accounts(session: AsyncSession) -> list[CoinAccount]:
     return list(await session.scalars(select(CoinAccount)))
 
