@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import AppError
 from app.modules.ai import client as ai_client
 from app.modules.ai import retrieval
+from app.modules.audit import service as audit_service
 from app.modules.couples.models import Couple
 from app.modules.simta import repository as repo
 from app.modules.simta.schemas import ChatResponse, PersonaStateOut
@@ -40,6 +41,15 @@ async def set_consent(
     session: AsyncSession, couple: Couple, user: User, authorized: bool
 ) -> None:
     await repo.upsert_consent(session, couple.id, user.id, authorized)
+    if not authorized:
+        await audit_service.record(
+            session,
+            user_id=user.id,
+            couple_id=couple.id,
+            action="simta.consent_revoke",
+            target_type="persona_consent",
+            target_id=user.id,
+        )
     await session.commit()
 
 

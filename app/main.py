@@ -13,6 +13,7 @@ from app.core.middleware import (
     RequestContextMiddleware,
     SecurityHeadersMiddleware,
 )
+from app.modules.audit.router import router as audit_router
 from app.modules.bills.router import router as bills_router
 from app.modules.coin_applies.router import router as coin_applies_router
 from app.modules.coins.router import router as coins_router
@@ -65,6 +66,7 @@ app.include_router(mall_router, prefix=API_PREFIX)
 app.include_router(diaries_router, prefix=API_PREFIX)
 app.include_router(todos_router, prefix=API_PREFIX)
 app.include_router(bills_router, prefix=API_PREFIX)
+app.include_router(audit_router, prefix=API_PREFIX)
 app.include_router(conflicts_router, prefix=API_PREFIX)
 app.include_router(inquiries_router, prefix=API_PREFIX)
 app.include_router(daily_router, prefix=API_PREFIX)

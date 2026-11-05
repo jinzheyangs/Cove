@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
+from app.modules.audit import service as audit_service
 from app.modules.couples import repository as repo
 from app.modules.couples.models import Couple, CoupleInvite
 from app.modules.users.models import User
@@ -70,6 +71,14 @@ async def bind(session: AsyncSession, user: User, code: str) -> Couple:
         bind_at=datetime.now(UTC),
     )
     invite.status = "used"
+    await audit_service.record(
+        session,
+        user_id=user.id,
+        couple_id=couple.id,
+        action="couple.bind",
+        target_type="couple",
+        target_id=couple.id,
+    )
     try:
         await session.commit()
     except IntegrityError as exc:

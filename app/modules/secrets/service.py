@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
+from app.modules.audit import service as audit_service
 from app.modules.coins import service as coin_service
 from app.modules.couples.models import Couple
 from app.modules.secrets import repository as repo
@@ -123,12 +124,28 @@ async def destroy(session: AsyncSession, couple: Couple, user: User, secret_id: 
     if secret.author_id != user.id:
         raise AppError("只能销毁自己发布的秘密", code=5004, status_code=403)
     await repo.destroy_one(session, secret)
+    await audit_service.record(
+        session,
+        user_id=user.id,
+        couple_id=couple.id,
+        action="secret.destroy",
+        target_type="secret",
+        target_id=secret.id,
+    )
     await session.commit()
 
 
 async def destroy_all_mine(session: AsyncSession, couple: Couple, user: User) -> int:
     """只销毁自己发布的，不触碰对方的秘密。"""
     count = await repo.destroy_all_of_author(session, couple.id, user.id)
+    await audit_service.record(
+        session,
+        user_id=user.id,
+        couple_id=couple.id,
+        action="secret.destroy_all",
+        target_type="secret",
+        detail={"count": count},
+    )
     await session.commit()
     return count
 
