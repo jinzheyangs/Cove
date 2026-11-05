@@ -1,3 +1,5 @@
+"""日记模块的请求 / 响应结构。"""
+
 from datetime import datetime
 from typing import Literal
 
@@ -5,6 +7,12 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class DiaryCreate(BaseModel):
+    """创建日记。
+
+    event_id 由客户端生成（通常是 UUID）：
+    两个人写同一件事时传同一个值，就能在查询时把两种视角聚到一起。
+    """
+
     mode: Literal["shared", "personal"] = "personal"
     title: str | None = Field(default=None, max_length=200)
     content: str = Field(min_length=1, max_length=20000)
@@ -16,6 +24,12 @@ class DiaryCreate(BaseModel):
 
 
 class DiaryUpdate(BaseModel):
+    """部分更新。
+
+    所有字段都是可选的，service 用 exclude_unset 只改传了的字段，
+    这样“只改标题”不会把正文清空。
+    """
+
     title: str | None = Field(default=None, max_length=200)
     content: str | None = Field(default=None, min_length=1, max_length=20000)
     mood_tags: list[str] | None = Field(default=None, max_length=10)
@@ -24,6 +38,8 @@ class DiaryUpdate(BaseModel):
 
 
 class DiaryOut(BaseModel):
+    """日记详情。content 返回时已解密。"""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: int

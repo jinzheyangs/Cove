@@ -1,3 +1,5 @@
+"""共同清单的 HTTP 接口。"""
+
 from typing import Annotated
 
 from fastapi import APIRouter, Query
@@ -20,6 +22,7 @@ router = APIRouter(prefix="/todos", tags=["todos"])
 async def create(
     body: TodoCreate, user: CurrentUser, couple: CurrentCouple, session: SessionDep
 ) -> Envelope[TodoOut]:
+    """新建清单项。"""
     todo = await service.create(session, couple, user, body)
     return Envelope(data=TodoOut.model_validate(todo))
 
@@ -32,6 +35,7 @@ async def list_items(
     category: str | None = None,
     status: Annotated[str | None, Query(pattern="^(pending|completed|cancelled)$")] = None,
 ) -> Envelope[list[TodoOut]]:
+    """列出清单。用 type 切换共同 / 单人。"""
     items = await service.list_items(
         session, couple, item_type=type, category=category, status=status
     )
@@ -46,6 +50,7 @@ async def update(
     couple: CurrentCouple,
     session: SessionDep,
 ) -> Envelope[TodoOut]:
+    """部分更新。单人清单只有创建者能改。"""
     todo = await service.update(session, couple, user, todo_id, body)
     return Envelope(data=TodoOut.model_validate(todo))
 
@@ -54,6 +59,7 @@ async def update(
 async def complete(
     todo_id: int, user: CurrentUser, couple: CurrentCouple, session: SessionDep
 ) -> Envelope[TodoCompleteOut]:
+    """完成清单项，同时返回一张纪念卡片。"""
     todo, card = await service.complete(session, couple, user, todo_id)
     return Envelope(data=TodoCompleteOut(todo=TodoOut.model_validate(todo), card=card))
 
@@ -62,5 +68,6 @@ async def complete(
 async def delete(
     todo_id: int, user: CurrentUser, couple: CurrentCouple, session: SessionDep
 ) -> Envelope[None]:
+    """删除清单项。"""
     await service.delete(session, couple, user, todo_id)
     return Envelope()

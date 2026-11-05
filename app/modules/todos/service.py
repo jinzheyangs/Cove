@@ -1,4 +1,9 @@
-"""业务层：共同清单与单人清单。"""
+"""业务层：共同清单与单人清单。
+
+权限规则：
+- shared：双方都能改、能完成
+- personal：只有创建者能改
+"""
 
 from datetime import UTC, datetime
 
@@ -15,6 +20,7 @@ from app.modules.users.models import User
 async def create(
     session: AsyncSession, couple: Couple, creator: User, body: TodoCreate
 ) -> TodoItem:
+    """新建清单项。默认进共同清单。"""
     todo = await repo.create(
         session,
         couple_id=couple.id,
@@ -37,6 +43,7 @@ async def list_items(
     category: str | None = None,
     status: str | None = None,
 ) -> list[TodoItem]:
+    """列出清单。前端用 type 切换共同 / 单人。"""
     return await repo.list_items(
         session, couple.id, item_type=item_type, category=category, status=status
     )
@@ -45,6 +52,12 @@ async def list_items(
 async def _get_editable(
     session: AsyncSession, couple: Couple, user: User, todo_id: int
 ) -> TodoItem:
+    """取出可编辑的清单项。
+
+    两个校验：
+    1. 属于当前关系（防越权）
+    2. 单人清单只有创建者能改
+    """
     todo = await repo.get(session, todo_id)
     if todo is None or todo.couple_id != couple.id:
         raise AppError("清单项不存在", code=9001, status_code=404)
@@ -57,6 +70,11 @@ async def _get_editable(
 async def update(
     session: AsyncSession, couple: Couple, user: User, todo_id: int, body: TodoUpdate
 ) -> TodoItem:
+    """部分更新。
+
+    exclude_unset 保证只改客户端传了的字段。
+    如果直接把状态改成 completed，顺手补上完成时间。
+    """
     todo = await _get_editable(session, couple, user, todo_id)
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(todo, field, value)
@@ -70,6 +88,11 @@ async def update(
 async def complete(
     session: AsyncSession, couple: Couple, user: User, todo_id: int
 ) -> tuple[TodoItem, MemoryCard]:
+    """完成清单项，并生成一张纪念卡片。
+
+    重复完成会报错，避免同一件事生成多张卡片。
+    卡片目前只是文案，前端可以渲染成图片同步到日记。
+    """
     todo = await _get_editable(session, couple, user, todo_id)
     if todo.status == "completed":
         raise AppError("这件事已经完成过了", code=9003, status_code=409)
@@ -88,6 +111,7 @@ async def complete(
 
 
 async def delete(session: AsyncSession, couple: Couple, user: User, todo_id: int) -> None:
+    """删除。权限和修改一致。"""
     todo = await _get_editable(session, couple, user, todo_id)
     await repo.delete(session, todo)
     await session.commit()
