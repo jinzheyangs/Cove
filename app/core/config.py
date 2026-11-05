@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     # 不设置则不校验（仅建议在内网暴露 /metrics）
     METRICS_TOKEN: str = ""
 
+    OTEL_ENABLED: bool = False
+    OTEL_SERVICE_NAME: str = "cove-api"
+    OTEL_EXPORTER_ENDPOINT: str = "http://localhost:4318/v1/traces"
+    OTEL_SAMPLE_RATIO: float = 1.0
+
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]

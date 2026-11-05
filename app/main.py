@@ -15,6 +15,7 @@ from app.core.middleware import (
     RequestContextMiddleware,
     SecurityHeadersMiddleware,
 )
+from app.core.tracing import setup_tracing
 from app.modules.audit.router import router as audit_router
 from app.modules.bills.router import router as bills_router
 from app.modules.coin_applies.router import router as coin_applies_router
@@ -77,6 +78,10 @@ app.include_router(daily_router, prefix=API_PREFIX)
 app.include_router(simta_router, prefix=API_PREFIX)
 app.include_router(privacy_router, prefix=API_PREFIX)
 app.include_router(notifications_router, prefix=API_PREFIX)
+
+
+# 必须在 app 和路由都配置好之后接入
+setup_tracing(app, engine)
 
 
 @app.get("/health")

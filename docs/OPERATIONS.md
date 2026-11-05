@@ -70,12 +70,32 @@ Redis 不可用时限流会放行（fail open），不会拖垮服务。
 
 排查顺序：请求 ID → 路径 → 状态码 → 耗时 → 异常栈。
 
+## 链路追踪
+
+默认关闭。开启后 FastAPI / SQLAlchemy / Redis / httpx 自动打点，
+包括 OpenAI SDK 的模型调用，统一导出到 Jaeger。
+
+```bash
+# .env
+OTEL_ENABLED=true
+OTEL_EXPORTER_ENDPOINT=http://jaeger:4318/v1/traces
+OTEL_SAMPLE_RATIO=1.0
+
+docker compose up -d jaeger
+# UI: http://localhost:16686
+```
+
+能看到一条请求里每个 SQL、Redis 操作、AI 调用的耗时瀑布图。
+
+生产环境建议把 `OTEL_SAMPLE_RATIO` 降到 0.1 以下，避免追踪存储被打满。
+
 ## 上线检查清单
 
 - [ ] `.env` 里的密钥不是默认值（`JWT_SECRET`、数据库密码、`BACKUP_PASSPHRASE`）
 - [ ] `ENV=prod`，`DEBUG=false`
 - [ ] HTTPS 已配置，`CORS_ORIGINS` 只放行真实域名
 - [ ] `METRICS_TOKEN` 已设置，或 `/metrics` 不对公网开放
+- [ ] 如开启链路追踪，`OTEL_SAMPLE_RATIO` 已按流量调低，Jaeger 端口不对公网开放
 - [ ] 数据库端口没有映射到公网
 - [ ] 备份任务已配置并跑通一次恢复
 - [ ] `alembic upgrade head` 已执行

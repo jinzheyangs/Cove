@@ -115,6 +115,7 @@ app/modules/<name>/
 - **限流**：按 IP 三档（全局 / 认证 / AI），Redis 故障时放行
 - **登录防爆破**：连续失败 5 次锁定 15 分钟
 - **指标**：`/metrics` 暴露 Prometheus 指标，可用 `METRICS_TOKEN` 保护
+- **链路追踪**：OpenTelemetry + Jaeger，默认关闭；开启后可见 SQL / Redis / AI 调用的耗时瀑布图
 
 运维细节见 [docs/OPERATIONS.md](docs/OPERATIONS.md)。
 
