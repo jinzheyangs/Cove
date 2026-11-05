@@ -32,5 +32,22 @@ class Settings(BaseSettings):
     AI_FAILURE_THRESHOLD: int = 5
     AI_RECOVERY_SECONDS: float = 60.0
 
+    # 逗号分隔，例如 https://a.com,https://b.com
+    CORS_ORIGINS: str = ""
+
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_REQUESTS: int = 120
+    RATE_LIMIT_WINDOW_SECONDS: int = 60
+    AUTH_RATE_LIMIT_REQUESTS: int = 10
+    AI_RATE_LIMIT_REQUESTS: int = 30
+    LOGIN_MAX_ATTEMPTS: int = 5
+    LOGIN_LOCK_SECONDS: int = 900
+
+    DAILY_GIFT_LIMIT: int = 500
+
+    @property
+    def cors_origins(self) -> list[str]:
+        return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
+
 
 settings = Settings()

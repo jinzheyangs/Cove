@@ -1,5 +1,8 @@
 import os
 
+# 测试不依赖 Redis：必须在导入 app 之前关掉限流
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
+
 import asyncpg
 import pytest_asyncio
 from sqlalchemy.engine import make_url

@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: cove
+          POSTGRES_PASSWORD: cove_dev_pass
+          POSTGRES_DB: cove
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cove"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      ENV: ci
+      DATABASE_URL: postgresql+asyncpg://cove:cove_dev_pass@localhost:5432/cove
+      TEST_DATABASE_URL: postgresql+asyncpg://cove:cove_dev_pass@localhost:5432/cove_test
+      JWT_SECRET: ci-only-secret
+      RATE_LIMIT_ENABLED: "false"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.8.22"
+
+      - run: uv sync --frozen
+
+      - name: Lint
+        run: uv run ruff check app tests
+
+      - name: Test
+        run: uv run pytest -q
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: backend
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t cove-api:ci .

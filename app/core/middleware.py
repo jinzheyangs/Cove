@@ -2,10 +2,16 @@ import time
 import uuid
 
 import structlog
+from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
+from app.core.config import settings
+from app.core.ratelimit import get_limiter
+
 logger = structlog.get_logger("http")
+
+_SKIP_RATE_LIMIT = {"/health", "/health/db", "/metrics"}
 
 
 class RequestContextMiddleware(BaseHTTPMiddleware):
@@ -26,6 +32,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             request_id=request_id,
             method=request.method,
             path=request.url.path,
+            client_ip=request.client.host if request.client else None,
         )
 
         started = time.perf_counter()
@@ -44,3 +51,56 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             duration_ms=duration_ms,
         )
         return response
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        response.headers.setdefault(
+            "Permissions-Policy", "geolocation=(), microphone=(), camera=()"
+        )
+        if settings.ENV == "prod":
+            response.headers.setdefault(
+                "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+            )
+        return response
+
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    """按 IP 做粗粒度限流；登录接口更严，AI 接口单独一档。"""
+
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        if not settings.RATE_LIMIT_ENABLED or path in _SKIP_RATE_LIMIT:
+            return await call_next(request)
+
+        client_ip = request.client.host if request.client else "unknown"
+        limit = settings.RATE_LIMIT_REQUESTS
+        window = settings.RATE_LIMIT_WINDOW_SECONDS
+        bucket = "global"
+
+        if path.startswith("/api/v1/auth"):
+            limit = settings.AUTH_RATE_LIMIT_REQUESTS
+            bucket = "auth"
+        elif path.startswith("/api/v1/inquiries") or path.startswith("/api/v1/sim-ta"):
+            limit = settings.AI_RATE_LIMIT_REQUESTS
+            bucket = "ai"
+
+        allowed = await get_limiter().hit(
+            f"rl:{bucket}:{client_ip}", limit, window
+        )
+        if not allowed:
+            logger.warning("rate_limit.exceeded", bucket=bucket, client_ip=client_ip)
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "code": 429,
+                    "message": "请求太频繁了，请稍后再试",
+                    "data": None,
+                },
+            )
+
+        return await call_next(request)
