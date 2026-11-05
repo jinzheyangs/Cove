@@ -1,7 +1,7 @@
 """业务层：询问中心。
 
 流程：双方各自匿名写 → 都提交后由 AI 汇总 → 补充意见 → 关闭。
-AI 只做一次固定调用，不走 agent。
+AI 只做一次固定调用，不走 agent——流程是确定的，不需要模型自己决定下一步。
 """
 
 from datetime import UTC, datetime
@@ -25,8 +25,12 @@ SYSTEM_PROMPT = (
     "语气温和、具体，不要说教，不要站队。"
 )
 
+# AI 不可用时的错误码：未配置 / 熔断或调用失败
+_AI_UNAVAILABLE = (11001, 11003)
+
 
 async def create(session: AsyncSession, couple: Couple, question: str) -> InquirySession:
+    """发起一次询问，进入 collecting 阶段。"""
     item = await repo.create_session(session, couple.id, question)
     await session.commit()
     await session.refresh(item)
@@ -36,6 +40,11 @@ async def create(session: AsyncSession, couple: Couple, question: str) -> Inquir
 async def submit_input(
     session: AsyncSession, couple: Couple, user: User, session_id: int, content: str
 ) -> InquirySession:
+    """提交/修改自己的真实想法。
+
+    只在 collecting 阶段允许：
+    一旦生成 AI 回复，输入就冻结，避免事后篡改。
+    """
     item = await _get(session, couple, session_id)
     if item.status != "collecting":
         raise AppError("已经进入下一阶段，不能修改了", code=13001, status_code=409)
@@ -47,6 +56,12 @@ async def submit_input(
 
 
 async def generate(session: AsyncSession, couple: Couple, session_id: int) -> InquirySession:
+    """调用一次大模型，生成中立汇总。
+
+    降级策略：
+    AI 不可用时回滚事务、保持 collecting 状态，
+    双方已经写好的内容不会丢，稍后可以重试。
+    """
     item = await _get(session, couple, session_id)
     if item.status != "collecting":
         raise AppError("这个询问已经生成过了", code=13002, status_code=409)
@@ -55,6 +70,7 @@ async def generate(session: AsyncSession, couple: Couple, session_id: int) -> In
     if len(inputs) < 2:
         raise AppError("双方都写完之后才能生成", code=13003, status_code=409)
 
+    # 先标记处理中，避免并发重复触发
     item.status = "ai_processing"
     await session.flush()
 
@@ -65,7 +81,7 @@ async def generate(session: AsyncSession, couple: Couple, session_id: int) -> In
     try:
         response = await ai_client.complete(system=SYSTEM_PROMPT, user=prompt)
     except AppError as exc:
-        if exc.code in (11001, 11003):
+        if exc.code in _AI_UNAVAILABLE:
             # 降级：双方的想法已经存下来了，回到 collecting 允许稍后重试
             await session.rollback()
             raise AppError(
@@ -85,6 +101,7 @@ async def generate(session: AsyncSession, couple: Couple, session_id: int) -> In
 async def supplement(
     session: AsyncSession, couple: Couple, user: User, session_id: int, content: str
 ) -> InquirySession:
+    """在 AI 回复之后补充意见。只在 reviewing 阶段允许。"""
     item = await _get(session, couple, session_id)
     if item.status != "reviewing":
         raise AppError("现在还不能补充意见", code=13004, status_code=409)
@@ -96,6 +113,7 @@ async def supplement(
 
 
 async def close(session: AsyncSession, couple: Couple, session_id: int) -> InquirySession:
+    """关闭询问，形成最终记录。"""
     item = await _get(session, couple, session_id)
     if item.status != "reviewing":
         raise AppError("当前状态不能关闭", code=13005, status_code=409)
@@ -110,6 +128,12 @@ async def close(session: AsyncSession, couple: Couple, session_id: int) -> Inqui
 async def get_detail(
     session: AsyncSession, couple: Couple, user: User, session_id: int
 ) -> InquiryOut:
+    """查看询问详情。
+
+    匿名性由这里保证：
+    - 只返回内容，不返回 user_id
+    - 双方都提交之前，inputs 一律为空
+    """
     item = await _get(session, couple, session_id)
     inputs = await repo.list_inputs(session, item.id)
     supplements = await repo.list_supplements(session, item.id)
@@ -132,6 +156,7 @@ async def get_detail(
 
 
 async def _get(session: AsyncSession, couple: Couple, session_id: int) -> InquirySession:
+    """取出属于当前关系的询问，否则 404。"""
     item = await repo.get_session(session, session_id)
     if item is None or item.couple_id != couple.id:
         raise AppError("询问不存在", code=13006, status_code=404)

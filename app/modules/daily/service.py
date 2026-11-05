@@ -1,6 +1,7 @@
 """业务层：每日一问。
 
 用固定题库按日期取题，零 AI 成本，也不需要等模型。
+这是整个产品里成本最低、但对留存最关键的模块。
 """
 
 from datetime import date, datetime
@@ -13,8 +14,11 @@ from app.modules.daily import repository as repo
 from app.modules.daily.schemas import DailyOut
 from app.modules.users.models import User
 
+# 按用户感知的“今天”切天。用 UTC 会导致北京时间早上 8 点才换题
 TZ = ZoneInfo("Asia/Shanghai")
 
+# 题库写死，避免依赖外部服务。改题库不会影响历史记录，
+# 因为答案表里冗余存了当天的题目文案。
 QUESTIONS = [
     "今天有没有哪一刻，你突然觉得有我在挺好？",
     "最近有什么事你一直想说，但还没找到机会？",
@@ -44,20 +48,31 @@ QUESTIONS = [
 
 
 def today() -> date:
+    """按北京时间取今天的日期。"""
     return datetime.now(TZ).date()
 
 
 def question_for(day: date) -> str:
+    """按日期确定性地选题。
+
+    用 toordinal 取模：同一天两个人拿到同一题，
+    不同天才换题，且不需要任何存储。
+    """
     return QUESTIONS[day.toordinal() % len(QUESTIONS)]
 
 
 def _partner_id(couple: Couple, user_id: int) -> int:
+    """关系里的另一个人。"""
     return couple.user2_id if couple.user1_id == user_id else couple.user1_id
 
 
 async def today_view(
     session: AsyncSession, couple: Couple, user: User
 ) -> DailyOut:
+    """今日问题 + 双方回答。
+
+    对方答案只在自己已回答后才返回。
+    """
     day = today()
     question = question_for(day)
 
@@ -77,6 +92,7 @@ async def today_view(
 async def answer(
     session: AsyncSession, couple: Couple, user: User, text: str
 ) -> DailyOut:
+    """提交或修改今天的回答，返回最新视图。"""
     day = today()
     await repo.upsert_answer(
         session,
