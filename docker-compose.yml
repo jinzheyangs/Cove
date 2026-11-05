@@ -60,7 +60,8 @@ services:
       retries: 10
 
   jaeger:
-    image: jaegertracing/all-in-one:1.62
+    # 生产环境建议固定版本；latest 是为了兼容部分镜像站
+    image: jaegertracing/all-in-one:latest
     environment:
       - COLLECTOR_OTLP_ENABLED=true
     ports:
