@@ -31,7 +31,8 @@ async def create(
         description=body.description,
     )
     await session.commit()  #提交事务，数据真正永久写到数据库
-    await session.refresh(todo) #重新从数据库把这条记录完整查一遍，把数据库最新的数据覆盖刷新到本地 ORM 对象 todo 上。
+    # 从数据库重新查一遍，把最新数据覆盖到本地 ORM 对象上
+    await session.refresh(todo)
     return todo
 
 
