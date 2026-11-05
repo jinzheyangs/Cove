@@ -1,3 +1,5 @@
+"""令牌：签发、轮换、登出与过期拒绝。"""
+
 import hashlib
 from datetime import UTC, datetime, timedelta
 

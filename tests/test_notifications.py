@@ -1,3 +1,5 @@
+"""站内通知：业务触发、按用户隔离、已读。"""
+
 from app.modules.coin_applies import service as apply_service
 from app.modules.notifications import service as notification_service
 from app.modules.secrets import service as secret_service

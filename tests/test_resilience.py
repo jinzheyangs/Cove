@@ -1,3 +1,5 @@
+"""可观测性与容错：请求 ID、熔断状态机、AI 降级。"""
+
 import time
 
 import httpx

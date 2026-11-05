@@ -1,3 +1,5 @@
+"""字段加密：加解密往返、库里存密文、兼容历史明文。"""
+
 from sqlalchemy import text
 
 from app.core.crypto import decrypt, encrypt

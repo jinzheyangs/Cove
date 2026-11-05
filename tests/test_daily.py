@@ -1,3 +1,5 @@
+"""每日一问：同题、对方答案延迟可见、可修改。"""
+
 from app.modules.daily import service
 from tests.helpers import seed_couple
 

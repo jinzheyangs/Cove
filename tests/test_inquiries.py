@@ -1,3 +1,5 @@
+"""询问中心：匿名输入、AI 单次调用与降级。"""
+
 import pytest
 
 from app.core.errors import AppError

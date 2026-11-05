@@ -1,3 +1,5 @@
+"""清单：完成卡片、重复完成、单人清单权限。"""
+
 import pytest
 
 from app.core.errors import AppError

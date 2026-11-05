@@ -1,3 +1,5 @@
+"""秘密树：定价、扣币摘取、燃尽、销毁权限。"""
+
 import pytest
 
 from app.core.errors import AppError

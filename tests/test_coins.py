@@ -1,3 +1,5 @@
+"""金币账本：赠与、消费、幂等、并发扣减与对账。"""
+
 import asyncio
 
 import pytest

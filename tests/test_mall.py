@@ -1,3 +1,5 @@
+"""商城：审批、购买扣币、库存与核销权限。"""
+
 import pytest
 
 from app.core.errors import AppError

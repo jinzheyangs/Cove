@@ -1,3 +1,5 @@
+"""金币申请：提交、审批调额、拒绝。"""
+
 import pytest
 
 from app.core.errors import AppError

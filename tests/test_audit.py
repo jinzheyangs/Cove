@@ -1,3 +1,5 @@
+"""审计日志：敏感操作是否留痕、是否按用户隔离。"""
+
 from app.modules.audit import service as audit_service
 from app.modules.secrets import service as secret_service
 from app.modules.secrets.schemas import SecretCreate

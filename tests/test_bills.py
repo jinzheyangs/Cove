@@ -1,3 +1,5 @@
+"""恋爱账本：金额校验、隐私过滤与统计口径。"""
+
 from decimal import Decimal
 
 import pytest

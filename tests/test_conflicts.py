@@ -1,3 +1,5 @@
+"""争吵模式：伤害词提示、状态流转与复盘关闭。"""
+
 import pytest
 
 from app.core.errors import AppError

@@ -1,3 +1,5 @@
+"""日记：各自视角关联、权限与字段回读。"""
+
 import pytest
 
 from app.core.errors import AppError

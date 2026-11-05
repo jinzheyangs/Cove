@@ -1,3 +1,5 @@
+"""隐私：解绑、注销匿名化、数据导出。"""
+
 import pytest
 
 from app.core.errors import AppError

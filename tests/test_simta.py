@@ -1,3 +1,5 @@
+"""模拟TA：授权前置、忠实度提示词、撤销即停用。"""
+
 import pytest
 
 from app.core.errors import AppError

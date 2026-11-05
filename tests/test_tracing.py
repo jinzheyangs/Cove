@@ -1,3 +1,5 @@
+"""链路追踪：默认关闭、开启后能导出 span。"""
+
 from opentelemetry import trace
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
