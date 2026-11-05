@@ -42,6 +42,9 @@ jobs:
       - name: Lint
         run: uv run ruff check app tests
 
+      - name: Audit dependencies
+        run: uv run pip-audit
+
       - name: Test
         run: uv run pytest -q
 
