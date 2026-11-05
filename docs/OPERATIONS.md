@@ -1,0 +1,83 @@
+# 运维手册
+
+## 备份
+
+```bash
+BACKUP_PASSPHRASE='你的口令' bash scripts/backup_db.sh backup
+```
+
+流程：`pg_dump` → `gzip` → AES-256 加密 → 写入 `backups/`，默认保留 30 天。
+
+**备份必须加密。** 未加密的 dump 里是用户全部的秘密和日记。
+
+把 `backups/` 定期同步到对象存储（OSS / COS），不要只留在同一台机器上。
+
+## 恢复
+
+```bash
+BACKUP_PASSPHRASE='你的口令' bash scripts/backup_db.sh restore backups/cove-20260101-030000.sql.gz.enc
+```
+
+**每月至少演练一次恢复。** 没演练过的备份等于没有备份。
+
+## 迁移
+
+```bash
+uv run alembic upgrade head       # 应用迁移
+uv run alembic current            # 查看当前版本
+uv run alembic downgrade -1       # 回退一步
+```
+
+上线顺序：**先备份 → 再迁移**。迁移前确认新代码与旧表结构兼容。
+
+## 限流参数
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `RATE_LIMIT_REQUESTS` | 120 | 每 IP 每分钟总请求数 |
+| `AUTH_RATE_LIMIT_REQUESTS` | 10 | 认证接口每分钟 |
+| `AI_RATE_LIMIT_REQUESTS` | 30 | AI 接口每分钟 |
+| `LOGIN_MAX_ATTEMPTS` | 5 | 登录失败锁定阈值 |
+| `LOGIN_LOCK_SECONDS` | 900 | 锁定时长 |
+
+Redis 不可用时限流会放行（fail open），不会拖垮服务。
+
+## 监控
+
+- `GET /health`：进程存活
+- `GET /health/db`：数据库连通
+- `GET /metrics`：Prometheus 指标（建议只在内网暴露，可设 `METRICS_TOKEN`）
+
+关键指标：
+
+| 指标 | 说明 |
+|---|---|
+| `cove_http_requests_total` | 请求量，按方法/路径/状态码 |
+| `cove_http_request_duration_seconds` | 延迟分布 |
+| `cove_ai_calls_total` | AI 调用结果：success / failure / circuit_open |
+
+建议告警：
+
+- 5xx 比例 > 1%
+- `cove_ai_calls_total{result="circuit_open"}` 持续增长
+- worker 日志出现「金币对账不一致」
+
+## 日志
+
+- 生产环境是 JSON 行，直接接 Loki / ELK / 云日志服务
+- 每条日志带 `request_id`，响应头 `X-Request-ID` 可以对应上
+- 日志**不记录请求体**：秘密、日记、消息都不会落盘
+
+排查顺序：请求 ID → 路径 → 状态码 → 耗时 → 异常栈。
+
+## 上线检查清单
+
+- [ ] `.env` 里的密钥不是默认值（`JWT_SECRET`、数据库密码、`BACKUP_PASSPHRASE`）
+- [ ] `ENV=prod`，`DEBUG=false`
+- [ ] HTTPS 已配置，`CORS_ORIGINS` 只放行真实域名
+- [ ] `METRICS_TOKEN` 已设置，或 `/metrics` 不对公网开放
+- [ ] 数据库端口没有映射到公网
+- [ ] 备份任务已配置并跑通一次恢复
+- [ ] `alembic upgrade head` 已执行
+- [ ] worker 已启动（对账、燃尽清理依赖它）
+- [ ] 隐私政策 / 用户协议 / 备案已完成

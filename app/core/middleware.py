@@ -7,6 +7,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
 from app.core.config import settings
+from app.core.metrics import REQUEST_COUNT, REQUEST_LATENCY
 from app.core.ratelimit import get_limiter
 
 logger = structlog.get_logger("http")
@@ -40,10 +41,19 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             response = await call_next(request)
         except Exception:
             duration_ms = round((time.perf_counter() - started) * 1000, 2)
+            route = request.scope.get("route")
+            path = getattr(route, "path", request.url.path)
+            REQUEST_COUNT.labels(request.method, path, "500").inc()
+            REQUEST_LATENCY.labels(request.method, path).observe(duration_ms / 1000)
             logger.exception("request.failed", duration_ms=duration_ms)
             raise
 
         duration_ms = round((time.perf_counter() - started) * 1000, 2)
+        route = request.scope.get("route")
+        path = getattr(route, "path", request.url.path)
+        REQUEST_COUNT.labels(request.method, path, str(response.status_code)).inc()
+        REQUEST_LATENCY.labels(request.method, path).observe(duration_ms / 1000)
+
         response.headers["X-Request-ID"] = request_id
         logger.info(
             "request.completed",

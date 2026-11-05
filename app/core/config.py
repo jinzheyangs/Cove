@@ -45,6 +45,9 @@ class Settings(BaseSettings):
 
     DAILY_GIFT_LIMIT: int = 500
 
+    # 不设置则不校验（仅建议在内网暴露 /metrics）
+    METRICS_TOKEN: str = ""
+
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]

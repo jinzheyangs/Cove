@@ -1,7 +1,9 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy import text
 
 from app.core.config import settings
@@ -87,3 +89,13 @@ async def health_db() -> dict:
     async with engine.connect() as conn:
         await conn.execute(text("SELECT 1"))
     return {"code": 0, "message": "success", "data": {"db": "ok"}}
+
+
+@app.get("/metrics")
+async def metrics(request: Request) -> Response:
+    # 建议只在内网暴露；设置 METRICS_TOKEN 后需要带上 X-Metrics-Token
+    if settings.METRICS_TOKEN and (
+        request.headers.get("X-Metrics-Token") != settings.METRICS_TOKEN
+    ):
+        return Response(status_code=403)
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)

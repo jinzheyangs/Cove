@@ -11,6 +11,7 @@ from openai import AsyncOpenAI
 
 from app.core.config import settings
 from app.core.errors import AppError
+from app.core.metrics import AI_CALLS
 from app.modules.ai.breaker import CircuitBreaker
 
 logger = structlog.get_logger("ai")
@@ -52,6 +53,7 @@ async def complete(*, system: str, user: str) -> str:
         raise AppError("AI 服务尚未配置", code=11001, status_code=503)
 
     if not breaker.allow_request():
+        AI_CALLS.labels("circuit_open").inc()
         logger.warning("ai.circuit_open")
         raise AppError("AI 服务暂时不可用", code=11003, status_code=503)
 
@@ -60,6 +62,7 @@ async def complete(*, system: str, user: str) -> str:
         try:
             reply = await _call(system, user)
             breaker.record_success()
+            AI_CALLS.labels("success").inc()
             return reply
         except Exception as exc:  # noqa: BLE001 - 外部依赖，任何失败都重试一次
             last_error = exc
@@ -68,5 +71,6 @@ async def complete(*, system: str, user: str) -> str:
                 await asyncio.sleep(0.5)
 
     breaker.record_failure()
+    AI_CALLS.labels("failure").inc()
     logger.error("ai.unavailable", attempts=_MAX_ATTEMPTS)
     raise AppError("AI 服务暂时不可用", code=11003, status_code=503) from last_error
