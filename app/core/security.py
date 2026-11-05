@@ -13,7 +13,10 @@ def hash_password(raw: str) -> str:
 
 
 def verify_password(raw: str, hashed: str) -> bool:
-    return _password_hash.verify(raw, hashed)
+    try:
+        return _password_hash.verify(raw, hashed)
+    except Exception:  # noqa: BLE001 - 哈希格式异常一律视为验证失败
+        return False
 
 
 def create_access_token(user_id: int) -> str:

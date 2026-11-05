@@ -91,3 +91,30 @@ async def bind(session: AsyncSession, user: User, code: str) -> Couple:
 
 async def get_active_couple(session: AsyncSession, user_id: int) -> Couple | None:
     return await repo.get_active_by_user(session, user_id)
+
+
+async def unbind(
+    session: AsyncSession,
+    couple: Couple,
+    user: User,
+    confirm: bool,
+    reason: str | None = None,
+) -> Couple:
+    """解除绑定。数据不删除，双方仍然可以导出自己的记录。"""
+    if not confirm:
+        raise AppError("请确认解除绑定", code=2008, status_code=400)
+
+    couple.status = "unbound"
+    couple.unbound_at = datetime.now(UTC)
+    await audit_service.record(
+        session,
+        user_id=user.id,
+        couple_id=couple.id,
+        action="couple.unbind",
+        target_type="couple",
+        target_id=couple.id,
+        detail={"reason": reason} if reason else None,
+    )
+    await session.commit()
+    await session.refresh(couple)
+    return couple

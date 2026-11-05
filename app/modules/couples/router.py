@@ -3,7 +3,13 @@ from fastapi import APIRouter
 from app.core.deps import CurrentUser, SessionDep
 from app.core.schemas import Envelope
 from app.modules.couples import service
-from app.modules.couples.schemas import BindRequest, CoupleOut, InviteOut
+from app.modules.couples.deps import CurrentCouple
+from app.modules.couples.schemas import (
+    BindRequest,
+    CoupleOut,
+    InviteOut,
+    UnbindRequest,
+)
 
 router = APIRouter(prefix="/couples", tags=["couples"])
 
@@ -20,6 +26,17 @@ async def bind(
 ) -> Envelope[CoupleOut]:
     couple = await service.bind(session, user, body.code)
     return Envelope(data=CoupleOut.model_validate(couple))
+
+
+@router.post("/unbind", response_model=Envelope[CoupleOut])
+async def unbind(
+    body: UnbindRequest,
+    user: CurrentUser,
+    couple: CurrentCouple,
+    session: SessionDep,
+) -> Envelope[CoupleOut]:
+    updated = await service.unbind(session, couple, user, body.confirm, body.reason)
+    return Envelope(data=CoupleOut.model_validate(updated))
 
 
 @router.get("/me", response_model=Envelope[CoupleOut | None])

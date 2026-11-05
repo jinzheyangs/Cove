@@ -2,16 +2,21 @@ from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.security import hash_password
 from app.modules.coins import repository as coin_repo
 from app.modules.couples.models import Couple
 from app.modules.users.models import User
+
+TEST_PASSWORD = "pass1234"
+# 只算一次，避免每个测试都做 argon2
+_PASSWORD_HASH = hash_password(TEST_PASSWORD)
 
 
 async def seed_couple(
     session: AsyncSession, phone_a: str = "13800000001", phone_b: str = "13800000002"
 ) -> tuple[User, User, Couple]:
-    a = User(phone=phone_a, password_hash="x", nickname="A")
-    b = User(phone=phone_b, password_hash="x", nickname="B")
+    a = User(phone=phone_a, password_hash=_PASSWORD_HASH, nickname="A")
+    b = User(phone=phone_b, password_hash=_PASSWORD_HASH, nickname="B")
     session.add_all([a, b])
     await session.flush()
     couple = Couple(
