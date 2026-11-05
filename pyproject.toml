@@ -5,46 +5,46 @@ description = "Cove — 情侣关系经营 App 后端"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "fastapi>=0.115.0",
-    "uvicorn[standard]>=0.32.0",
-    "gunicorn>=23.0.0",
-    "pydantic>=2.9.0",
-    "pydantic-settings>=2.6.0",
+    "fastapi>=0.162.0",
+    "uvicorn[standard]>=0.54.0",
+    "gunicorn>=26.2.0",
+    "pydantic>=2.14.2",
+    "pydantic-settings>=2.16.2",
     # 上限 2.1：opentelemetry-instrumentation-sqlalchemy 目前只支持 < 2.1
-    "sqlalchemy[asyncio]>=2.0.36,<2.1",
-    "asyncpg>=0.30.0",
-    "alembic>=1.14.0",
-    "redis>=5.2.0",
-    "arq>=0.26.0",
-    "structlog>=24.4.0",
-    "httpx>=0.28.0",
-    "python-multipart>=0.0.17",
-    "pyjwt>=2.10.0",
-    "pwdlib[argon2]>=0.2.1",
-    "cryptography>=43.0.0",
-    "openai>=1.57.0",
-    "tzdata>=2024.2",
-    "prometheus-client>=0.21.0",
-    "opentelemetry-api>=1.29.0",
-    "opentelemetry-sdk>=1.29.0",
-    "opentelemetry-exporter-otlp-proto-http>=1.29.0",
-    "opentelemetry-instrumentation-fastapi>=0.50b0",
-    "opentelemetry-instrumentation-sqlalchemy>=0.50b0",
-    "opentelemetry-instrumentation-redis>=0.50b0",
-    "opentelemetry-instrumentation-httpx>=0.50b0",
+    "sqlalchemy[asyncio]>=2.1.6,<2.2",
+    "asyncpg>=0.32.0",
+    "alembic>=1.20.1",
+    "redis>=8.1.0",
+    "arq>=0.28.0",
+    "structlog>=26.1.0",
+    "httpx>=0.28.1",
+    "python-multipart>=0.0.33",
+    "pyjwt>=2.15.1",
+    "pwdlib[argon2]>=0.3.1",
+    "cryptography>=50.0.2",
+    "openai>=3.42.1",
+    "tzdata>=2026.6",
+    "prometheus-client>=0.26.0",
+    "opentelemetry-api>=1.45.2",
+    "opentelemetry-sdk>=1.45.2",
+    "opentelemetry-exporter-otlp-proto-http>=1.45.2",
+    "opentelemetry-instrumentation-fastapi>=0.66b2",
+    "opentelemetry-instrumentation-sqlalchemy>=0.66b2",
+    "opentelemetry-instrumentation-redis>=0.66b2",
+    "opentelemetry-instrumentation-httpx>=0.66b2",
 ]
 
 # OSS 是可选依赖：只有 STORAGE_BACKEND=oss 的生产环境需要
 [project.optional-dependencies]
-oss = ["oss2>=2.18.4"]
+oss = ["oss2>=2.19.1"]
 
 [dependency-groups]
 dev = [
-    "pytest>=8.3.0",
-    "pytest-asyncio>=0.24.0",
-    "ruff>=0.8.0",
-    "mypy>=1.13.0",
-    "pip-audit>=2.7.0",
+    "pytest>=9.2.0",
+    "pytest-asyncio>=1.4.1.post1",
+    "ruff>=0.17.3",
+    "mypy>=2.4.1",
+    "pip-audit>=2.10.1",
 ]
 
 [tool.uv]
