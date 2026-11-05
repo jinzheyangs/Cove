@@ -1,4 +1,7 @@
-"""数据访问层：模拟TA 的授权与设置。"""
+"""数据访问层：模拟TA 的授权与设置。
+
+约定：不 commit，事务由 service 控制。
+"""
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +12,7 @@ from app.modules.simta.models import PersonaConsent, PersonaSettings
 async def get_consent(
     session: AsyncSession, couple_id: int, user_id: int
 ) -> PersonaConsent | None:
+    """查某人在某段关系里的授权记录。"""
     return await session.scalar(
         select(PersonaConsent).where(
             PersonaConsent.couple_id == couple_id, PersonaConsent.user_id == user_id
@@ -19,6 +23,7 @@ async def get_consent(
 async def upsert_consent(
     session: AsyncSession, couple_id: int, user_id: int, authorized: bool
 ) -> PersonaConsent:
+    """开启或撤销授权。没有记录时创建，有则更新。"""
     consent = await get_consent(session, couple_id, user_id)
     if consent is None:
         consent = PersonaConsent(
@@ -34,9 +39,11 @@ async def upsert_consent(
 async def get_settings(
     session: AsyncSession, couple_id: int, owner_id: int
 ) -> PersonaSettings | None:
+    """查某个发起人的偏好设置。"""
     return await session.scalar(
         select(PersonaSettings).where(
-            PersonaSettings.couple_id == couple_id, PersonaSettings.owner_id == owner_id
+            PersonaSettings.couple_id == couple_id,
+            PersonaSettings.owner_id == owner_id,
         )
     )
 
@@ -44,6 +51,7 @@ async def get_settings(
 async def upsert_settings(
     session: AsyncSession, couple_id: int, owner_id: int, fidelity: str
 ) -> PersonaSettings:
+    """写入或更新忠实度偏好。"""
     settings = await get_settings(session, couple_id, owner_id)
     if settings is None:
         settings = PersonaSettings(
