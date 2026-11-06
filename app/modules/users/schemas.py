@@ -32,6 +32,9 @@ class UserOut(BaseModel):
 
     刻意不包含 password_hash、deleted_at 等内部字段。
     from_attributes=True 让它可以由 ORM 对象直接转换。
+
+    avatar 是存储 key，avatar_url 是当前可访问地址。
+    编辑资料时回传 avatar，展示时用 avatar_url。
     """
 
     model_config = ConfigDict(from_attributes=True)
@@ -40,7 +43,23 @@ class UserOut(BaseModel):
     phone: str
     nickname: str
     avatar: str | None = None   #存储oss对象
+    avatar_url: str | None = None
     created_at: datetime    #创建时间
+
+
+class ProfileUpdate(BaseModel):
+    """更新个人资料。只传要改的字段。"""
+
+    nickname: str | None = Field(default=None, min_length=1, max_length=50)
+    # 头像的 object key，由 /uploads/avatar 返回
+    avatar: str | None = Field(default=None, max_length=255)
+
+
+class ChangePasswordRequest(BaseModel):
+    """修改密码。新密码长度和注册保持一致。"""
+
+    old_password: str = Field(min_length=1, max_length=64)
+    new_password: str = Field(min_length=6, max_length=64)
 
 
 class TokenOut(BaseModel):

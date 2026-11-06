@@ -43,35 +43,40 @@ def _check_content(content_type: str, data: bytes) -> None:
         raise AppError("文件内容与类型不符", code=16001, status_code=400)
 
 
-def _key_for(couple_id: int, ext: str) -> str:
+def _key_for(
+    couple_id: int,
+    ext: str,
+    *,
+    purpose: str = "diaries",
+    user_id: int | None = None,
+) -> str:
     """生成对象 key。
 
-    结构：couples/{couple_id}/{用途}/{随机}.{ext}
+    结构：couples/{couple_id}/{用途}/{用户?}/{随机}.{ext}
     带 couple 前缀有两个作用：
     - 删除时能校验归属
     - 以后按关系批量清理时好定位
     """
-    return f"couples/{couple_id}/diaries/{uuid4().hex}{ext}"
+    if user_id is not None:
+        return f"couples/{couple_id}/{purpose}/{user_id}/{uuid4().hex}{ext}"
+    return f"couples/{couple_id}/{purpose}/{uuid4().hex}{ext}"
 
 
-async def upload_diary_image(
-    couple: Couple, content_type: str | None, data: bytes
+async def _upload(
+    couple: Couple,
+    content_type: str | None,
+    data: bytes,
+    *,
+    purpose: str,
+    user_id: int | None = None,
 ) -> UploadOut:
-    """上传一张日记图片。
-
-    Args:
-        content_type: 客户端声明的 MIME，会被规范化
-        data: 文件内容，调用方负责限制读取上限
-
-    Returns:
-        key 用于入库，url 用于展示。
-    """
+    """校验并保存图片，返回 key 和可访问 URL。"""
     normalized = (content_type or "").split(";")[0].strip().lower()
-    _check_content(normalized, data)  #校验类型、文件头和大小。
+    _check_content(normalized, data)  # 校验类型、文件头和大小。
 
-    ext = _ALLOWED[normalized][0]  #得到类型
-    key = _key_for(couple.id, ext)  #生成对象key
-    storage = get_storage() #返回oss实例
+    ext = _ALLOWED[normalized][0]  # 得到类型
+    key = _key_for(couple.id, ext, purpose=purpose, user_id=user_id)
+    storage = get_storage()  # 返回 oss 实例
 
     # 本地写盘和 OSS 上传都是阻塞操作，放到线程池，避免卡住事件循环
     await asyncio.to_thread(storage.save, key, data, normalized)
@@ -81,6 +86,26 @@ async def upload_diary_image(
         url=storage.build_url(key),
         size=len(data),
         content_type=normalized,
+    )
+
+
+async def upload_diary_image(
+    couple: Couple, content_type: str | None, data: bytes
+) -> UploadOut:
+    """上传一张日记图片。"""
+    return await _upload(couple, content_type, data, purpose="diaries")
+
+
+async def upload_avatar(
+    couple: Couple, user_id: int, content_type: str | None, data: bytes
+) -> UploadOut:
+    """上传头像。
+
+    key 里带 user_id，PUT /users/me 时会校验前缀，
+    防止把别人的头像地址填到自己头上。
+    """
+    return await _upload(
+        couple, content_type, data, purpose="avatars", user_id=user_id
     )
 
 

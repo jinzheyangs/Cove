@@ -82,8 +82,8 @@ app/modules/<name>/
 
 | 模块 | 前缀 | 说明 |
 |---|---|---|
-| 认证 | `/api/v1/auth` | 手机号 + 密码，JWT |
-| 用户 | `/api/v1/users` | 当前用户 |
+| 认证 | `/api/v1/auth` | 手机号 + 密码，JWT，修改密码 |
+| 用户 | `/api/v1/users` | 当前用户、资料编辑 |
 | 情侣 | `/api/v1/couples` | 邀请码绑定、解绑 |
 | 金币 | `/api/v1/coins` | 余额、流水、赠与 |
 | 金币申请 | `/api/v1/coin-applies` | 申请、审批、拒绝 |
@@ -96,7 +96,7 @@ app/modules/<name>/
 | 询问中心 | `/api/v1/inquiries` | 匿名输入、AI 汇总、补充、关闭 |
 | 每日一问 | `/api/v1/daily` | 固定题库，每天一题 |
 | 模拟TA | `/api/v1/sim-ta` | 授权、忠实度、对话 |
-| 上传 | `/api/v1/uploads` | 日记图片上传、删除 |
+| 上传 | `/api/v1/uploads` | 日记图片、头像上传与删除 |
 | AI 对话 | `/api/v1/agent` | 多轮人格对话、会话管理 |
 | 审计 | `/api/v1/audit` | 敏感操作记录 |
 | 通知 | `/api/v1/notifications` | 站内通知、未读数、已读 |

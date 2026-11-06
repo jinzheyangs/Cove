@@ -200,6 +200,53 @@
         ]
       }
     },
+    "/api/v1/auth/change-password": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Change Password",
+        "description": "修改密码。\n\n成功后吊销全部 refresh token（其他设备需重新登录），\n当前设备会拿到一对新令牌。",
+        "operationId": "change_password_api_v1_auth_change_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_TokenOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/users/me": {
       "get": {
         "tags": [
@@ -215,6 +262,51 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Envelope_UserOut_"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Update Me",
+        "description": "更新昵称 / 头像。\n\navatar 传的是 /uploads/avatar 返回的 key，不是完整 URL。",
+        "operationId": "update_me_api_v1_users_me_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_UserOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -3345,6 +3437,53 @@
         ]
       }
     },
+    "/api/v1/uploads/avatar": {
+      "post": {
+        "tags": [
+          "uploads"
+        ],
+        "summary": "Upload Avatar",
+        "description": "上传头像。\n\n返回的 key 需要再调用 PUT /users/me 设置到 avatar 字段。",
+        "operationId": "upload_avatar_api_v1_uploads_avatar_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_avatar_api_v1_uploads_avatar_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_UploadOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/uploads/{key}": {
       "delete": {
         "tags": [
@@ -4469,6 +4608,21 @@
         ],
         "title": "Body_import_chat_log_api_v1_agent_imports_post"
       },
+      "Body_upload_avatar_api_v1_uploads_avatar_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "JPEG / PNG / WebP，最大 10MB"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_avatar_api_v1_uploads_avatar_post"
+      },
       "Body_upload_diary_image_api_v1_uploads_diary_image_post": {
         "properties": {
           "file": {
@@ -4502,6 +4656,29 @@
         ],
         "title": "CategoryStat",
         "description": "单个分类的金额合计。"
+      },
+      "ChangePasswordRequest": {
+        "properties": {
+          "old_password": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Old Password"
+          },
+          "new_password": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 6,
+            "title": "New Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "old_password",
+          "new_password"
+        ],
+        "title": "ChangePasswordRequest",
+        "description": "修改密码。新密码长度和注册保持一致。"
       },
       "ChatImportOut": {
         "properties": {
@@ -6958,6 +7135,38 @@
         "title": "PersonaStateOut",
         "description": "当前授权与偏好状态。\n\n同时返回「我授权了吗」和「对方授权了吗」，\n前端可以据此决定是否禁用聊天入口。"
       },
+      "ProfileUpdate": {
+        "properties": {
+          "nickname": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 50,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nickname"
+          },
+          "avatar": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar"
+          }
+        },
+        "type": "object",
+        "title": "ProfileUpdate",
+        "description": "更新个人资料。只传要改的字段。"
+      },
       "RefreshRequest": {
         "properties": {
           "refresh_token": {
@@ -7734,6 +7943,17 @@
             ],
             "title": "Avatar"
           },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -7748,7 +7968,7 @@
           "created_at"
         ],
         "title": "UserOut",
-        "description": "对外暴露的用户信息。\n\n刻意不包含 password_hash、deleted_at 等内部字段。\nfrom_attributes=True 让它可以由 ORM 对象直接转换。"
+        "description": "对外暴露的用户信息。\n\n刻意不包含 password_hash、deleted_at 等内部字段。\nfrom_attributes=True 让它可以由 ORM 对象直接转换。\n\navatar 是存储 key，avatar_url 是当前可访问地址。\n编辑资料时回传 avatar，展示时用 avatar_url。"
       },
       "ValidationError": {
         "properties": {

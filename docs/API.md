@@ -51,6 +51,9 @@ Base URL: https://<你的域名>/api/v1
 | 1003 | 429 | 尝试次数过多，请稍后再试 |
 | 1005 | 401 | 登录已失效，请重新登录 |
 | 1006 | 401 | 账号不存在 |
+| 1007 | 403 | 原密码错误 |
+| 1008 | 400 | 新密码不能和原密码相同 |
+| 1009 | 400 | 头像地址不合法 |
 | 2001 | 409 | 你已经绑定过伴侣了 |
 | 2002 | 500 | 邀请码生成失败，请重试 |
 | 2003 | 404 | 邀请码无效 |
@@ -147,6 +150,7 @@ Base URL: https://<你的域名>/api/v1
 | agent | GET | `/api/v1/agent/imports/{import_id}` | 查看单次导入的状态和计数。 | 是 |
 | agent | DELETE | `/api/v1/agent/imports/{import_id}` | 删除一次导入：消息、向量、画像一起清理。 | 是 |
 | audit | GET | `/api/v1/audit` | 查看自己发起过的敏感操作，时间倒序。 | 是 |
+| auth | POST | `/api/v1/auth/change-password` | 修改密码。 | 是 |
 | auth | POST | `/api/v1/auth/login` | 手机号 + 密码登录。 | 否 |
 | auth | POST | `/api/v1/auth/logout` | 登出当前设备：吊销传入的 refresh token。 | 否 |
 | auth | POST | `/api/v1/auth/logout-all` | 退出所有设备：吊销该用户全部 refresh token。 | 是 |
@@ -218,9 +222,11 @@ Base URL: https://<你的域名>/api/v1
 | todos | PUT | `/api/v1/todos/{todo_id}` | 部分更新。单人清单只有创建者能改。 | 是 |
 | todos | DELETE | `/api/v1/todos/{todo_id}` | 删除清单项。 | 是 |
 | todos | POST | `/api/v1/todos/{todo_id}/complete` | 完成清单项，同时返回一张纪念卡片。 | 是 |
+| uploads | POST | `/api/v1/uploads/avatar` | 上传头像。 | 是 |
 | uploads | POST | `/api/v1/uploads/diary-image` | 上传一张日记图片。 | 是 |
 | uploads | DELETE | `/api/v1/uploads/{key}` | 删除当前关系内的一张图片。key 必须属于当前 couple。 | 是 |
 | users | GET | `/api/v1/users/me` | 获取当前登录用户。依赖已保证 user 存在。 | 是 |
+| users | PUT | `/api/v1/users/me` | 更新昵称 / 头像。 | 是 |
 | ops | GET | `/health` | 进程存活检查。不访问数据库，用于负载均衡/容器探活。 | 否 |
 | ops | GET | `/health/db` | 数据库连通性检查。数据库不可用时这里会抛 500。 | 否 |
 | ops | GET | `/metrics` | Prometheus 指标端点。 | 否 |
@@ -489,6 +495,29 @@ Base URL: https://<你的域名>/api/v1
 ---
 
 ### auth
+
+#### `POST /api/v1/auth/change-password`
+
+修改密码。
+
+**请求体**
+
+| 字段 | 类型 | 必填 |
+|---|---|---|
+| `old_password` | string | 是 |
+| `new_password` | string | 是 |
+
+**响应 data**
+
+| 字段 | 类型 | 必填 |
+|---|---|---|
+| `access_token` | string | 是 |
+| `refresh_token` | string | 是 |
+| `token_type` | string | 否 |
+| `expires_in` | int | 是 |
+| `user` | UserOut | 是 |
+
+---
 
 #### `POST /api/v1/auth/login`
 
@@ -2061,6 +2090,21 @@ Base URL: https://<你的域名>/api/v1
 
 ### uploads
 
+#### `POST /api/v1/uploads/avatar`
+
+上传头像。
+
+**响应 data**
+
+| 字段 | 类型 | 必填 |
+|---|---|---|
+| `key` | string | 是 |
+| `url` | string | 是 |
+| `size` | int | 是 |
+| `content_type` | string | 是 |
+
+---
+
 #### `POST /api/v1/uploads/diary-image`
 
 上传一张日记图片。
@@ -2104,6 +2148,31 @@ Base URL: https://<你的域名>/api/v1
 | `phone` | string | 是 |
 | `nickname` | string | 是 |
 | `avatar` | string? | 否 |
+| `avatar_url` | string? | 否 |
+| `created_at` | datetime | 是 |
+
+---
+
+#### `PUT /api/v1/users/me`
+
+更新昵称 / 头像。
+
+**请求体**
+
+| 字段 | 类型 | 必填 |
+|---|---|---|
+| `nickname` | string? | 否 |
+| `avatar` | string? | 否 |
+
+**响应 data**
+
+| 字段 | 类型 | 必填 |
+|---|---|---|
+| `id` | int | 是 |
+| `phone` | string | 是 |
+| `nickname` | string | 是 |
+| `avatar` | string? | 否 |
+| `avatar_url` | string? | 否 |
 | `created_at` | datetime | 是 |
 
 ---

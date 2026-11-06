@@ -95,7 +95,7 @@ async def _replace_source(
 
     先删旧向量再写新的，保证不会出现「改了内容但旧片段还在」。
     """
-    chunks = chunk_text(text, settings.RAG_CHUNK_SIZE, settings.RAG_CHUNK_OVERLAP)
+    chunks = chunk_text(text, settings.RAG_CHUNK_SIZE, settings.RAG_CHUNK_OVERLAP)  #进行切分
     if not chunks:
         await _delete_source(session, source_type, source_id)
         return
@@ -128,7 +128,8 @@ async def _replace_source(
         )
 
     vectors = await embeddings.embed_texts(chunks)
-    ids = [f"{source_type}:{source_id}:{i}" for i in range(len(chunks))]
+    ids = [f"{source_type}:{source_id}:{i}" for i in range(len(chunks))]    #给这一批加上ids
+
     metadatas = [
         {
             "couple_id": couple_id,
@@ -160,10 +161,10 @@ async def _replace_source(
 
 async def index_diary(session: AsyncSession, diary_id: int) -> None:
     """索引一篇日记。"""
-    if not embeddings.is_configured():
+    if not embeddings.is_configured():  #判断一下是否配置嵌入向量
         return
 
-    diary = await session.get(Diary, diary_id)
+    diary = await session.get(Diary, diary_id)  #找出该id的日记
     if diary is None:
         return
 
@@ -255,7 +256,7 @@ def _build_chat_windows(
             continue
         buffer.append(message)
         if len(buffer) > size:
-            buffer.pop(0)
+            buffer.pop(0)   #得出最新的4条
         if message.sender_id == target_id and len(buffer) >= 2:
             windows.append(list(buffer))
 
@@ -296,14 +297,14 @@ async def index_chat_import(session: AsyncSession, import_id: int) -> int:
     Returns:
         写入的窗口数量。
     """
-    if not embeddings.is_configured():
+    if not embeddings.is_configured():      #看看是否配置embedding
         return 0
 
-    import_row = await session.get(ChatImport, import_id)
+    import_row = await session.get(ChatImport, import_id)   #从主表看一下是否存在
     if import_row is None:
         return 0
 
-    couple = await session.get(Couple, import_row.couple_id)
+    couple = await session.get(Couple, import_row.couple_id)    #查一下情侣关系是否正式
     if couple is None:
         return 0
 
@@ -324,18 +325,18 @@ async def index_chat_import(session: AsyncSession, import_id: int) -> int:
             )
             .order_by(ChatMessage.sent_at, ChatMessage.id)
         )
-    )
+    )   #按时间顺序排好记录
 
     # 重建前先清掉这个导入已有的索引
     await delete_chat_import(session, import_id)
 
-    window_no = 0
+    window_no = 0       #窗口计数器
     for target_id in (couple.user1_id, couple.user2_id):
         other_id = (
             couple.user2_id if target_id == couple.user1_id else couple.user1_id
-        )
-        target_name = users[target_id].nickname if target_id in users else "TA"
-        other_name = users[other_id].nickname if other_id in users else "对方"
+        )   #得出对方的id
+        target_name = users[target_id].nickname if target_id in users else "TA"     #得到本人的名字
+        other_name = users[other_id].nickname if other_id in users else "对方"      #得到对方的名字
 
         windows = _cap_windows(
             _build_chat_windows(messages, target_id), settings.RAG_CHAT_MAX_WINDOWS
@@ -343,7 +344,7 @@ async def index_chat_import(session: AsyncSession, import_id: int) -> int:
         texts = [
             _format_chat_window(window, target_id, target_name, other_name)
             for window in windows
-        ]
+        ]   #返回由块返回的字符串列表
 
         # 分批 embedding，避免单次请求过大
         for start in range(0, len(texts), 100):

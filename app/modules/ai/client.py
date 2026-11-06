@@ -41,7 +41,7 @@ async def _call(messages: list[dict[str, str]]) -> str:
 
     空内容当失败处理：有些供应商会在限流时返回空 choices。
     """
-    client = _build_client()
+    client = _build_client()    #得到模型实例
     response = await client.chat.completions.create(
         model=settings.LLM_MODEL,
         messages=messages,

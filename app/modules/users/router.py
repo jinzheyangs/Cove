@@ -12,7 +12,9 @@ from app.core.schemas import Envelope
 from app.modules.users import service
 from app.modules.users.models import User
 from app.modules.users.schemas import (
+    ChangePasswordRequest,
     LoginRequest,
+    ProfileUpdate,
     RefreshRequest,
     RegisterRequest,
     TokenOut,
@@ -33,7 +35,7 @@ def _token_response(access: str, refresh: str, user: User) -> TokenOut:
         access_token=access,
         refresh_token=refresh,
         expires_in=settings.JWT_ACCESS_EXPIRE_MINUTES * 60,
-        user=UserOut.model_validate(user),
+        user=service.to_out(user),
     )
 
 
@@ -85,7 +87,34 @@ async def logout_all(user: CurrentUser, session: SessionDep) -> Envelope[dict]:
     return Envelope(data={"revoked": count})
 
 
+@auth_router.post("/change-password", response_model=Envelope[TokenOut])
+async def change_password(
+    body: ChangePasswordRequest, user: CurrentUser, session: SessionDep
+) -> Envelope[TokenOut]:
+    """修改密码。
+
+    成功后吊销全部 refresh token（其他设备需重新登录），
+    当前设备会拿到一对新令牌。
+    """
+    access, refresh = await service.change_password(
+        session, user, body.old_password, body.new_password
+    )
+    return Envelope(data=_token_response(access, refresh, user))
+
+
 @users_router.get("/me", response_model=Envelope[UserOut])
 async def me(user: CurrentUser) -> Envelope[UserOut]:
     """获取当前登录用户。依赖已保证 user 存在。"""
-    return Envelope(data=UserOut.model_validate(user))
+    return Envelope(data=service.to_out(user))
+
+
+@users_router.put("/me", response_model=Envelope[UserOut])
+async def update_me(
+    body: ProfileUpdate, user: CurrentUser, session: SessionDep
+) -> Envelope[UserOut]:
+    """更新昵称 / 头像。
+
+    avatar 传的是 /uploads/avatar 返回的 key，不是完整 URL。
+    """
+    updated = await service.update_profile(session, user, body)
+    return Envelope(data=service.to_out(updated))

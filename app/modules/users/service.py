@@ -14,8 +14,12 @@ from app.core.config import settings
 from app.core.errors import AppError
 from app.core.ratelimit import get_limiter
 from app.core.security import create_access_token, hash_password, verify_password
+from app.core.storage import get_storage
+from app.modules.audit import service as audit_service
+from app.modules.couples import repository as couple_repo
 from app.modules.users import repository as repo
 from app.modules.users.models import User
+from app.modules.users.schemas import ProfileUpdate, UserOut
 
 
 async def register(session: AsyncSession, phone: str, password: str, nickname: str) -> User:
@@ -163,3 +167,76 @@ async def logout_all(session: AsyncSession, user: User) -> int:
     count = await repo.revoke_all_refresh_tokens(session, user.id, datetime.now(UTC))
     await session.commit()
     return count
+
+
+def to_out(user: User) -> UserOut:
+    """把用户转成接口结构，顺便生成头像的可访问地址。"""
+    avatar_url = None
+    if user.avatar:
+        avatar_url = get_storage().build_url(user.avatar)
+    return UserOut(
+        id=user.id,
+        phone=user.phone,
+        nickname=user.nickname,
+        avatar=user.avatar,
+        avatar_url=avatar_url,
+        created_at=user.created_at,
+    )
+
+
+async def update_profile(
+    session: AsyncSession, user: User, body: ProfileUpdate
+) -> User:
+    """更新昵称 / 头像。
+
+    avatar 必须是当前关系下、当前用户自己的头像 key，
+    防止把别人的对象地址填到自己头上。
+    """
+    changes = body.model_dump(exclude_unset=True)
+
+    if "nickname" in changes and changes["nickname"] is not None:
+        user.nickname = changes["nickname"]
+
+    if "avatar" in changes:
+        avatar = changes["avatar"]
+        if avatar:
+            couple = await couple_repo.get_active_by_user(session, user.id)
+            expected = (
+                f"couples/{couple.id}/avatars/{user.id}/" if couple else None
+            )
+            if expected is None or not avatar.startswith(expected):
+                raise AppError("头像地址不合法", code=1009, status_code=400)
+        user.avatar = avatar
+
+    await session.commit()
+    await session.refresh(user)
+    return user
+
+
+async def change_password(
+    session: AsyncSession, user: User, old_password: str, new_password: str
+) -> tuple[str, str]:
+    """修改密码。
+
+    成功后吊销该用户全部 refresh token（其他设备需要重新登录），
+    再给当前设备签发一对新令牌。
+    """
+    if not verify_password(old_password, user.password_hash):
+        raise AppError("原密码错误", code=1007, status_code=403)
+    if old_password == new_password:
+        raise AppError("新密码不能和原密码相同", code=1008, status_code=400)
+
+    user.password_hash = hash_password(new_password)
+    await session.flush()
+    await repo.revoke_all_refresh_tokens(session, user.id, datetime.now(UTC))
+    await audit_service.record(
+        session,
+        user_id=user.id,
+        action="user.change_password",
+        target_type="user",
+        target_id=user.id,
+    )
+    await session.commit()
+
+    # 当前设备保持登录
+    return await issue_tokens(session, user)
