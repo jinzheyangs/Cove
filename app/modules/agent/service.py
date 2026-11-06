@@ -24,7 +24,6 @@ from app.modules.agent import repository as repo
 from app.modules.agent import tools
 from app.modules.agent.models import AgentConversation, PersonaProfile
 from app.modules.agent.schemas import (
-    ChatOut,
     ChatTurn,
     ConversationDetailOut,
     MessageOut,
@@ -147,107 +146,28 @@ async def _build_messages(
     history: list[ChatTurn],
 ) -> list[dict]:
     """组装发给模型的完整 messages。"""
-    target = await session.get(User, conversation.target_id)
-    nickname = target.nickname if target is not None else "TA"
+    target = await session.get(User, conversation.target_id)    #查询模拟Ta基础的信息
+    nickname = target.nickname if target is not None else "TA"  #名字
 
+    # TA 的风格设置：忠实 / 理想化
     fidelity_row = await persona_repo.get_settings(session, couple.id, user.id)
     fidelity = fidelity_row.fidelity if fidelity_row else "faithful"
 
+    # 被模拟 TA 的完整画像（口头禅、句长、标点习惯）
     profile = await repo.get_profile(session, couple.id, conversation.target_id)
 
     fragments = await retrieval.collect_context(
         session, couple.id, conversation.target_id, query_text=message
-    )
-    context = "\n".join(fragments)
+    )   #拿到记忆字符串列表
+    context = "\n".join(fragments)  #得到字符串
 
-    system = _system_prompt(nickname, user.nickname, fidelity, profile, context)
-    history_messages = await _load_history(session, conversation, history)
+    system = _system_prompt(nickname, user.nickname, fidelity, profile, context)    #组装提示词
+    history_messages = await _load_history(session, conversation, history)      #拿到历史
 
     return (
         [{"role": "system", "content": system}]
         + history_messages
         + [{"role": "user", "content": message}]
-    )
-
-
-async def chat(
-    session: AsyncSession,
-    couple: Couple,
-    user: User,
-    conversation_id: int,
-    message: str,
-    history: list[ChatTurn],
-) -> ChatOut:
-    """进行一轮对话，允许模型调用只读工具。"""
-    conversation = await validate_for_chat(
-        session, couple, user, conversation_id
-    )
-    messages = await _build_messages(
-        session, couple, user, conversation, message, history
-    )
-
-    reply = ""
-    for _ in range(settings.AGENT_MAX_TOOL_ROUNDS):
-        result = await ai_client.complete_with_tools(messages, tools.TOOL_SCHEMAS)
-        tool_calls = getattr(result, "tool_calls", None)
-
-        if not tool_calls:
-            reply = result.content or ""
-            break
-
-        # 把模型想调用的工具原样追加回对话
-        messages.append(
-            {
-                "role": "assistant",
-                "content": result.content or "",
-                "tool_calls": [
-                    {
-                        "id": call.id,
-                        "type": "function",
-                        "function": {
-                            "name": call.function.name,
-                            "arguments": call.function.arguments,
-                        },
-                    }
-                    for call in tool_calls
-                ],
-            }
-        )
-
-        for call in tool_calls:
-            try:
-                args = json.loads(call.function.arguments or "{}")
-            except json.JSONDecodeError:
-                args = {}
-            output = await tools.execute_tool(
-                call.function.name,
-                args,
-                session=session,
-                couple=couple,
-                user=user,
-                target_id=conversation.target_id,
-            )
-            messages.append(
-                {"role": "tool", "tool_call_id": call.id, "content": output}
-            )
-    else:
-        # 超过工具调用轮数仍然没有给出文本，兜底
-        reply = "我想了一下，你再说具体一点？"
-
-    if conversation.persist:
-        await repo.add_message(
-            session, conversation_id=conversation.id, role="user", content=message
-        )
-        await repo.add_message(
-            session, conversation_id=conversation.id, role="assistant", content=reply
-        )
-        conversation.expires_at = datetime.now(UTC) + timedelta(
-            days=settings.AGENT_RETENTION_DAYS
-        )
-        await session.commit()
-
-    return ChatOut(
-        conversation_id=conversation.id, reply=reply, disclaimer=DISCLAIMER
     )
 
 
@@ -259,10 +179,13 @@ async def stream_reply(
     message: str,
     history: list[ChatTurn],
 ):
-    """流式生成回复。
+    """流式生成回复，支持工具调用。
 
-    流式模式不支持工具调用：工具需要多轮往返，
-    和逐字输出混在一起体验很乱。需要工具时走普通接口。
+    产出两类事件：
+    - ("delta", 文本片段)：直接推给客户端
+    - ("tool", {id, name, label, status})：工具执行状态
+
+    工具调用和文本可以交替出现：模型先说一句、调工具、再接着说。
     """
     couple = await session.get(Couple, couple_id)
     user = await session.get(User, user_id)
@@ -277,9 +200,85 @@ async def stream_reply(
     )
 
     reply = ""
-    async for delta in ai_client.stream_chat(messages):
-        reply += delta
-        yield delta
+    for _ in range(settings.AGENT_MAX_TOOL_ROUNDS):
+        tool_calls: list[dict] = []
+
+        async for kind, payload in ai_client.stream_with_tools(
+            messages, tools.TOOL_SCHEMAS
+        ):
+            if kind == "delta":
+                reply += payload
+                yield ("delta", payload)
+            elif kind == "tool_calls":
+                tool_calls = payload
+
+        if not tool_calls:
+            break
+
+        # 把模型想调用的工具追加回对话，下一轮模型才能看到执行结果
+        messages.append(
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": call["id"],
+                        "type": "function",
+                        "function": {
+                            "name": call["name"],
+                            "arguments": call["arguments"],
+                        },
+                    }
+                    for call in tool_calls
+                ],
+            }
+        )
+
+        for call in tool_calls:
+            # 只推状态和可读标签，不推工具的原始参数或结果
+            yield (
+                "tool",
+                {
+                    "id": call["id"],
+                    "name": call["name"],
+                    "label": tools.TOOL_LABELS.get(call["name"], "正在查询"),
+                    "status": "running",
+                },
+            )
+
+            try:
+                args = json.loads(call["arguments"] or "{}")
+            except json.JSONDecodeError:
+                args = {}
+
+            output = await tools.execute_tool(
+                call["name"],
+                args,
+                session=session,
+                couple=couple,
+                user=user,
+                target_id=conversation.target_id,
+            )
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": call["id"],
+                    "content": output,
+                }
+            )
+            yield (
+                "tool",
+                {
+                    "id": call["id"],
+                    "name": call["name"],
+                    "status": "done",
+                },
+            )
+    else:
+        # 达到上限仍然没有给出文本，兜底一句，避免空回复
+        fallback = "我想了一下，你再说具体一点？"
+        reply += fallback
+        yield ("delta", fallback)
 
     if conversation.persist:
         await repo.add_message(
@@ -328,11 +327,11 @@ async def _load_history(
     - 服务端保存：从库里取最近 N 轮
     - 不保存：用客户端传来的 history
     """
-    limit = settings.AGENT_MAX_HISTORY_TURNS * 2
+    limit = settings.AGENT_MAX_HISTORY_TURNS * 2    #消息条数
 
-    if not conversation.persist:
-        turns = request_history[-limit:]
-        return [{"role": t.role, "content": t.content} for t in turns]
+    if not conversation.persist:    #没开持久化情况
+        turns = request_history[-limit:]    #前端页面带上来的
+        return [{"role": t.role, "content": t.content} for t in turns]  
 
     rows = await repo.list_messages(session, conversation.id, limit)
     return [{"role": row.role, "content": row.content} for row in reversed(rows)]

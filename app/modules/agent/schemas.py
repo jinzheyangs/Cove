@@ -46,12 +46,6 @@ class ChatIn(BaseModel):
     history: list[ChatTurn] = Field(default_factory=list, max_length=40)
 
 
-class ChatOut(BaseModel):
-    conversation_id: int
-    reply: str
-    disclaimer: str
-
-
 class MessageOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

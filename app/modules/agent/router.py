@@ -19,7 +19,6 @@ from app.modules.agent import import_service, importers, service
 from app.modules.agent.schemas import (
     ChatImportOut,
     ChatIn,
-    ChatOut,
     ConversationCreate,
     ConversationDetailOut,
     ConversationOut,
@@ -34,10 +33,10 @@ async def import_chat_log(
     couple: CurrentCouple,
     user: CurrentUser,
     session: SessionDep,
-    file: Annotated[UploadFile, File(description="JSONL 或 JSON 聊天记录")],
+    file: Annotated[UploadFile, File(description="JSONL 或 JSON 聊天记录")],  #；聊天记录
     format: Annotated[str | None, Form()] = None,
-    owner_name: Annotated[str | None, Form()] = None,
-    partner_name: Annotated[str | None, Form()] = None,
+    owner_name: Annotated[str | None, Form()] = None,       #我的昵称
+    partner_name: Annotated[str | None, Form()] = None,     #对方昵称
 ) -> Envelope[ChatImportOut]:
     """导入聊天记录。
 
@@ -144,25 +143,9 @@ async def delete_conversation(
     return Envelope()
 
 
-@router.post(
-    "/conversations/{conversation_id}/messages",
-    response_model=Envelope[ChatOut],
-)
-async def chat(
-    conversation_id: int,
-    body: ChatIn,
-    user: CurrentUser,
-    couple: CurrentCouple,
-    session: SessionDep,
-) -> Envelope[ChatOut]:
-    """发送一条消息，返回分身的回复。
-
-    需要对方已授权。会话设置为不保存时，客户端需要自带 history。
-    """
-    result = await service.chat(
-        session, couple, user, conversation_id, body.message, body.history
-    )
-    return Envelope(data=result)
+def _sse(event: str, data: dict) -> str:
+    """拼一条 SSE 事件。"""
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
 @router.post("/conversations/{conversation_id}/messages/stream")
@@ -173,12 +156,16 @@ async def chat_stream(
     couple: CurrentCouple,
     session: SessionDep,
 ) -> StreamingResponse:
-    """流式对话（SSE）。
+    """流式对话（SSE），工具调用也在流里。
+
+    事件类型：
+    - delta: 文本片段
+    - tool:  工具状态（running / done），只含名称和可读标签
+    - done:  本轮结束
+    - error: 出错，附带业务错误码
 
     先在普通请求里完成归属和授权校验，错误能以正常 HTTP 状态返回；
     校验通过后再切换成事件流。
-
-    流式模式不支持工具调用，需要工具时用普通接口。
     """
     await service.validate_for_chat(session, couple, user, conversation_id)
     couple_id = couple.id
@@ -188,7 +175,7 @@ async def chat_stream(
         # 流式响应会超出请求依赖的生命周期，所以自己开一个会话
         async with SessionLocal() as stream_session:
             try:
-                async for delta in service.stream_reply(
+                async for kind, payload in service.stream_reply(
                     stream_session,
                     couple_id,
                     user_id,
@@ -196,23 +183,13 @@ async def chat_stream(
                     body.message,
                     body.history,
                 ):
-                    yield f"data: {json.dumps({'delta': delta}, ensure_ascii=False)}\n\n"
-                yield (
-                    "data: "
-                    + json.dumps(
-                        {"done": True, "conversation_id": conversation_id},
-                        ensure_ascii=False,
-                    )
-                    + "\n\n"
-                )
+                    if kind == "delta":
+                        yield _sse("delta", {"delta": payload})
+                    elif kind == "tool":
+                        yield _sse("tool", payload)
+                yield _sse("done", {"conversation_id": conversation_id})
             except AppError as exc:
-                yield (
-                    "data: "
-                    + json.dumps(
-                        {"error": exc.message, "code": exc.code}, ensure_ascii=False
-                    )
-                    + "\n\n"
-                )
+                yield _sse("error", {"code": exc.code, "message": exc.message})
 
     return StreamingResponse(
         event_stream(),

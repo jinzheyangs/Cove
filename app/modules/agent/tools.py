@@ -140,6 +140,17 @@ async def _get_today_question(session, couple, user, target_id, args) -> dict:
     }
 
 
+# 流式对话里展示给用户的可读状态，不带任何工具结果
+TOOL_LABELS = {
+    "search_memories": "正在查记忆",
+    "get_couple_summary": "正在查关系信息",
+    "get_coin_balance": "正在查金币",
+    "list_mall_items": "正在查商城",
+    "list_todos": "正在查清单",
+    "get_today_question": "正在查今日一问",
+}
+
+
 _HANDLERS = {
     "search_memories": _search_memories,
     "get_couple_summary": _get_couple_summary,

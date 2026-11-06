@@ -1,7 +1,6 @@
 """Agent 工具：只读查询、工具调用循环、流式回复。"""
 
 import json
-from types import SimpleNamespace
 
 from sqlalchemy import select
 
@@ -110,7 +109,7 @@ async def test_search_memories(session, monkeypatch):
     assert output["results"] == ["记忆片段"]
 
 
-async def test_chat_executes_tool_and_continues(session, monkeypatch):
+async def test_stream_executes_tool_and_continues(session, monkeypatch):
     a, b, couple = await seed_couple(session)
     await simta_service.set_consent(session, couple, b, True)
     conversation = await service.create_conversation(
@@ -119,23 +118,30 @@ async def test_chat_executes_tool_and_continues(session, monkeypatch):
 
     rounds: list[list[dict]] = []
 
-    def make_tool_call():
-        return SimpleNamespace(
-            id="call-1",
-            function=SimpleNamespace(name="get_coin_balance", arguments="{}"),
-        )
-
-    async def fake_complete(messages, tool_schemas):
+    async def fake_stream(messages, tool_schemas):
         rounds.append(list(messages))
         if len(rounds) == 1:
-            return SimpleNamespace(content="", tool_calls=[make_tool_call()])
-        return SimpleNamespace(content="你现在有 0 个金币", tool_calls=None)
+            yield (
+                "tool_calls",
+                [{"id": "call-1", "name": "get_coin_balance", "arguments": "{}"}],
+            )
+        else:
+            yield ("delta", "你现在有 0 个金币")
 
-    monkeypatch.setattr(ai_client, "complete_with_tools", fake_complete)
+    monkeypatch.setattr(ai_client, "stream_with_tools", fake_stream)
 
-    result = await service.chat(session, couple, a, conversation.id, "我有多少金币", [])
+    deltas: list[str] = []
+    tool_events: list[dict] = []
+    async for kind, payload in service.stream_reply(
+        session, couple.id, a.id, conversation.id, "我有多少金币", []
+    ):
+        if kind == "delta":
+            deltas.append(payload)
+        else:
+            tool_events.append(payload)
 
-    assert result.reply == "你现在有 0 个金币"
+    assert "".join(deltas) == "你现在有 0 个金币"
+    assert [event["status"] for event in tool_events] == ["running", "done"]
     # 第二轮 messages 里应该已经有工具返回结果
     roles = [message["role"] for message in rounds[1]]
     assert "tool" in roles
@@ -148,18 +154,18 @@ async def test_stream_reply_yields_and_persists(session, monkeypatch):
         session, couple, a, None, persist=True
     )
 
-    async def fake_stream(messages):
-        yield "在"
-        yield "呢"
+    async def fake_stream(messages, tool_schemas):
+        yield ("delta", "在")
+        yield ("delta", "呢")
 
-    monkeypatch.setattr(ai_client, "stream_chat", fake_stream)
+    monkeypatch.setattr(ai_client, "stream_with_tools", fake_stream)
 
-    chunks = [
-        chunk
-        async for chunk in service.stream_reply(
-            session, couple.id, a.id, conversation.id, "在吗", []
-        )
-    ]
+    chunks: list[str] = []
+    async for kind, payload in service.stream_reply(
+        session, couple.id, a.id, conversation.id, "在吗", []
+    ):
+        assert kind == "delta"
+        chunks.append(payload)
 
     assert chunks == ["在", "呢"]
 

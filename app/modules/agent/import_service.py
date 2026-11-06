@@ -61,14 +61,15 @@ async def import_chat_log(
     同一份文件重复导入不会产生重复消息：
     靠 (couple_id, source_hash) 唯一索引去重。
     """
-    await _require_mutual_consent(session, couple)
+    await _require_mutual_consent(session, couple)      #授权判断
 
+    # 拉取对方信息，同时验证关系
     partner = await session.get(User, _partner_id(couple, uploader.id))
     if partner is None:
         raise AppError("伴侣不存在", code=17006, status_code=404)
 
-    text = raw.decode("utf-8-sig", errors="replace")
-    parsed = importers.parse_messages(text, fmt)
+    text = raw.decode("utf-8-sig", errors="replace")    #二进制转文本
+    parsed = importers.parse_messages(text, fmt)        #拆聊天记录，传回结构化列表
 
     if len(parsed.messages) > settings.CHAT_IMPORT_MAX_MESSAGES:
         raise AppError(
@@ -92,12 +93,12 @@ async def import_chat_log(
     session.add(import_row)
     await session.flush()
 
-    values: list[dict] = []
-    seen: set[str] = set()
-    skipped = parsed.skipped
+    values: list[dict] = []     #有效消息
+    seen: set[str] = set()      #去重的临时集合
+    skipped = parsed.skipped    #计数器（错误）
 
     for message in parsed.messages:
-        sender_name = message.sender.strip()
+        sender_name = message.sender.strip()        #发件人昵称
         if sender_name in owner_names:
             sender_id = uploader.id
         elif sender_name in partner_names:
@@ -133,7 +134,10 @@ async def import_chat_log(
     if not values:
         raise AppError("没有可导入的消息", code=17009, status_code=400)
 
-    owner_count = sum(1 for value in values if value["sender_id"] == uploader.id)
+    # 统计我自己的消息条数
+    owner_count = sum(
+        1 for value in values if value["sender_id"] == uploader.id
+    )
     if owner_count == 0 or owner_count == len(values):
         raise AppError(
             "只识别到一方的消息，请检查 owner_name / partner_name 是否和文件里的名字一致",

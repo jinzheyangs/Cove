@@ -189,14 +189,41 @@ uv run python scripts/reindex_user.py <couple_id> <user_id>
 模拟TA 的对话入口是 `/api/v1/agent`，不是单次问答：
 
 ```
-POST /agent/conversations                 新建会话
-POST /agent/conversations/{id}/messages   发一条消息
-POST /agent/conversations/{id}/messages/stream  流式回复（SSE）
-GET  /agent/conversations/{id}            查看历史
-DELETE /agent/conversations/{id}          删除会话和消息
+POST /agent/conversations                        新建会话
+POST /agent/conversations/{id}/messages/stream   发消息，SSE 流式返回
+GET  /agent/conversations/{id}                   查看历史
+DELETE /agent/conversations/{id}                 删除会话和消息
 ```
 
-流式模式逐字返回，适合聊天界面；它不支持工具调用，需要工具时走普通接口。
+只有一个对话接口，流式返回，工具调用也在同一个流里。
+
+SSE 事件类型：
+
+| event | 含义 |
+|---|---|
+| `delta` | 文本片段，直接追加到气泡 |
+| `tool` | 工具状态：`running` / `done`，只含名称和可读标签 |
+| `done` | 本轮结束 |
+| `error` | 出错，带业务错误码 |
+
+示例：
+
+```
+event: delta
+data: {"delta":"我看看"}
+
+event: tool
+data: {"id":"call_1","name":"get_coin_balance","label":"正在查金币","status":"running"}
+
+event: tool
+data: {"id":"call_1","name":"get_coin_balance","status":"done"}
+
+event: delta
+data: {"delta":"你现在有 12 个金币"}
+
+event: done
+data: {"conversation_id":1}
+```
 
 每轮流程：
 

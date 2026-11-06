@@ -1,7 +1,9 @@
-"""AI 对话：多轮记忆、授权校验、不保存模式、隔离、删除与过期清理。"""
+"""AI 对话：多轮记忆、授权校验、不保存模式、隔离、删除与过期清理。
+
+对话统一走流式接口，测试里用假 stream_with_tools 收集输出。
+"""
 
 from datetime import UTC, datetime, timedelta
-from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import select
@@ -20,7 +22,28 @@ async def _allow(session, couple, target):
     await simta_service.set_consent(session, couple, target, True)
 
 
-async def test_chat_persists_user_and_assistant_messages(session, monkeypatch):
+async def _collect(gen) -> tuple[str, list[dict]]:
+    """把流式事件收敛成完整文本 + 工具状态列表。"""
+    deltas: list[str] = []
+    tools: list[dict] = []
+    async for kind, payload in gen:
+        if kind == "delta":
+            deltas.append(payload)
+        else:
+            tools.append(payload)
+    return "".join(deltas), tools
+
+
+def _fake_stream(text: str, captured: dict | None = None):
+    async def fake(messages, tool_schemas):
+        if captured is not None:
+            captured["messages"] = messages
+        yield ("delta", text)
+
+    return fake
+
+
+async def test_stream_persists_user_and_assistant_messages(session, monkeypatch):
     a, b, couple = await seed_couple(session)
     await _allow(session, couple, b)
     conversation = await service.create_conversation(
@@ -28,18 +51,17 @@ async def test_chat_persists_user_and_assistant_messages(session, monkeypatch):
     )
 
     captured: dict = {}
+    monkeypatch.setattr(
+        ai_client, "stream_with_tools", _fake_stream("在呢，怎么啦", captured)
+    )
 
-    async def fake_chat(messages, tools):
-        captured["messages"] = messages
-        return SimpleNamespace(content="在呢，怎么啦", tool_calls=None)
+    reply, _ = await _collect(
+        service.stream_reply(
+            session, couple.id, a.id, conversation.id, "今天好累", []
+        )
+    )
 
-    monkeypatch.setattr(ai_client, "complete_with_tools", fake_chat)
-
-    result = await service.chat(session, couple, a, conversation.id, "今天好累", [])
-
-    assert result.reply == "在呢，怎么啦"
-    assert result.disclaimer
-
+    assert reply == "在呢，怎么啦"
     # system prompt 里带上了被模拟者的昵称
     assert "B" in captured["messages"][0]["content"]
 
@@ -54,14 +76,17 @@ async def test_chat_persists_user_and_assistant_messages(session, monkeypatch):
     assert rows[0].content == "今天好累"
 
 
-async def test_chat_requires_partner_consent(session, monkeypatch):
+async def test_stream_requires_partner_consent(session):
     a, _, couple = await seed_couple(session)
     conversation = await service.create_conversation(
         session, couple, a, None, persist=True
     )
 
     with pytest.raises(AppError) as exc:
-        await service.chat(session, couple, a, conversation.id, "在吗", [])
+        async for _ in service.stream_reply(
+            session, couple.id, a.id, conversation.id, "在吗", []
+        ):
+            pass
 
     assert exc.value.code == 14001
 
@@ -74,17 +99,22 @@ async def test_history_is_included_in_next_turn(session, monkeypatch):
     )
 
     captured: dict = {}
+    monkeypatch.setattr(
+        ai_client, "stream_with_tools", _fake_stream("回复一", captured)
+    )
 
-    async def fake_chat(messages, tools):
-        captured["messages"] = messages
-        return SimpleNamespace(content="回复一", tool_calls=None)
+    await _collect(
+        service.stream_reply(
+            session, couple.id, a.id, conversation.id, "第一句", []
+        )
+    )
+    await _collect(
+        service.stream_reply(
+            session, couple.id, a.id, conversation.id, "第二句", []
+        )
+    )
 
-    monkeypatch.setattr(ai_client, "complete_with_tools", fake_chat)
-
-    await service.chat(session, couple, a, conversation.id, "第一句", [])
-    await service.chat(session, couple, a, conversation.id, "第二句", [])
-
-    contents = [m["content"] for m in captured["messages"]]
+    contents = [message["content"] for message in captured["messages"]]
     assert "第一句" in contents
     assert "回复一" in contents
     assert contents[-1] == "第二句"
@@ -100,20 +130,21 @@ async def test_persist_false_uses_request_history_and_stores_nothing(
     )
 
     captured: dict = {}
-
-    async def fake_chat(messages, tools):
-        captured["messages"] = messages
-        return SimpleNamespace(content="记得", tool_calls=None)
-
-    monkeypatch.setattr(ai_client, "complete_with_tools", fake_chat)
+    monkeypatch.setattr(
+        ai_client, "stream_with_tools", _fake_stream("记得", captured)
+    )
 
     history = [
         ChatTurn(role="user", content="之前说的"),
         ChatTurn(role="assistant", content="我记得"),
     ]
-    await service.chat(session, couple, a, conversation.id, "你还记得吗", history)
+    await _collect(
+        service.stream_reply(
+            session, couple.id, a.id, conversation.id, "你还记得吗", history
+        )
+    )
 
-    contents = [m["content"] for m in captured["messages"]]
+    contents = [message["content"] for message in captured["messages"]]
     assert "之前说的" in contents
     assert "我记得" in contents
 
@@ -146,11 +177,10 @@ async def test_delete_conversation_removes_messages(session, monkeypatch):
         session, couple, a, None, persist=True
     )
 
-    async def fake_chat(messages, tools):
-        return SimpleNamespace(content="好", tool_calls=None)
-
-    monkeypatch.setattr(ai_client, "complete_with_tools", fake_chat)
-    await service.chat(session, couple, a, conversation.id, "在吗", [])
+    monkeypatch.setattr(ai_client, "stream_with_tools", _fake_stream("好"))
+    await _collect(
+        service.stream_reply(session, couple.id, a.id, conversation.id, "在吗", [])
+    )
 
     conversation_id = conversation.id
     await service.delete_conversation(session, couple, a, conversation_id)

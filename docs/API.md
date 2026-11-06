@@ -122,6 +122,8 @@ Base URL: https://<你的域名>/api/v1
 | 17005 | 400 | 只支持 jsonl / json 格式 |
 | 17006 | 404 | 伴侣不存在 |
 | 17007 | 404 | 导入记录不存在 |
+| 17008 | 400 | 只识别到一方的消息，请检查 owner_name / partner_name 是否和文件里的名字一致 |
+| 17009 | 400 | 没有可导入的消息 |
 
 > `429` 为限流；`500` 为未捕获异常，前端统一提示稍后重试。
 
@@ -133,8 +135,7 @@ Base URL: https://<你的域名>/api/v1
 | agent | POST | `/api/v1/agent/conversations` | 新建会话，被模拟对象固定为伴侣。 | 是 |
 | agent | GET | `/api/v1/agent/conversations/{conversation_id}` | 会话详情，包含消息记录。 | 是 |
 | agent | DELETE | `/api/v1/agent/conversations/{conversation_id}` | 删除会话及其全部消息。 | 是 |
-| agent | POST | `/api/v1/agent/conversations/{conversation_id}/messages` | 发送一条消息，返回分身的回复。 | 是 |
-| agent | POST | `/api/v1/agent/conversations/{conversation_id}/messages/stream` | 流式对话（SSE）。 | 是 |
+| agent | POST | `/api/v1/agent/conversations/{conversation_id}/messages/stream` | 流式对话（SSE），工具调用也在流里。 | 是 |
 | agent | GET | `/api/v1/agent/imports` | 查看历史导入记录和状态。 | 是 |
 | agent | POST | `/api/v1/agent/imports` | 导入聊天记录。 | 是 |
 | agent | GET | `/api/v1/agent/imports/{import_id}` | 查看单次导入的状态和计数。 | 是 |
@@ -304,36 +305,9 @@ Base URL: https://<你的域名>/api/v1
 
 ---
 
-#### `POST /api/v1/agent/conversations/{conversation_id}/messages`
-
-发送一条消息，返回分身的回复。
-
-**参数**
-
-| 位置 | 名称 | 类型 | 必填 |
-|---|---|---|---|
-| path | `conversation_id` | int | 是 |
-
-**请求体**
-
-| 字段 | 类型 | 必填 |
-|---|---|---|
-| `message` | string | 是 |
-| `history` | ChatTurn[] | 否 |
-
-**响应 data**
-
-| 字段 | 类型 | 必填 |
-|---|---|---|
-| `conversation_id` | int | 是 |
-| `reply` | string | 是 |
-| `disclaimer` | string | 是 |
-
----
-
 #### `POST /api/v1/agent/conversations/{conversation_id}/messages/stream`
 
-流式对话（SSE）。
+流式对话（SSE），工具调用也在流里。
 
 **参数**
 

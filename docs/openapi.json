@@ -3725,71 +3725,13 @@
         }
       }
     },
-    "/api/v1/agent/conversations/{conversation_id}/messages": {
-      "post": {
-        "tags": [
-          "agent"
-        ],
-        "summary": "Chat",
-        "description": "发送一条消息，返回分身的回复。\n\n需要对方已授权。会话设置为不保存时，客户端需要自带 history。",
-        "operationId": "chat_api_v1_agent_conversations__conversation_id__messages_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "conversation_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Conversation Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ChatIn"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Envelope_ChatOut_"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/agent/conversations/{conversation_id}/messages/stream": {
       "post": {
         "tags": [
           "agent"
         ],
         "summary": "Chat Stream",
-        "description": "流式对话（SSE）。\n\n先在普通请求里完成归属和授权校验，错误能以正常 HTTP 状态返回；\n校验通过后再切换成事件流。\n\n流式模式不支持工具调用，需要工具时用普通接口。",
+        "description": "流式对话（SSE），工具调用也在流里。\n\n事件类型：\n- delta: 文本片段\n- tool:  工具状态（running / done），只含名称和可读标签\n- done:  本轮结束\n- error: 出错，附带业务错误码\n\n先在普通请求里完成归属和授权校验，错误能以正常 HTTP 状态返回；\n校验通过后再切换成事件流。",
         "operationId": "chat_stream_api_v1_agent_conversations__conversation_id__messages_stream_post",
         "security": [
           {
@@ -4533,29 +4475,6 @@
         "title": "ChatIn",
         "description": "一轮对话请求。\n\nhistory 只在会话设置为不保存时使用；\n服务端保存的会话会自动读取历史，不需要重复传。"
       },
-      "ChatOut": {
-        "properties": {
-          "conversation_id": {
-            "type": "integer",
-            "title": "Conversation Id"
-          },
-          "reply": {
-            "type": "string",
-            "title": "Reply"
-          },
-          "disclaimer": {
-            "type": "string",
-            "title": "Disclaimer"
-          }
-        },
-        "type": "object",
-        "required": [
-          "conversation_id",
-          "reply",
-          "disclaimer"
-        ],
-        "title": "ChatOut"
-      },
       "ChatRequest": {
         "properties": {
           "message": {
@@ -5241,32 +5160,6 @@
         },
         "type": "object",
         "title": "Envelope[ChatImportOut]"
-      },
-      "Envelope_ChatOut_": {
-        "properties": {
-          "code": {
-            "type": "integer",
-            "title": "Code",
-            "default": 0
-          },
-          "message": {
-            "type": "string",
-            "title": "Message",
-            "default": "success"
-          },
-          "data": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ChatOut"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "type": "object",
-        "title": "Envelope[ChatOut]"
       },
       "Envelope_ChatResponse_": {
         "properties": {

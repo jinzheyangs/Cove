@@ -92,10 +92,10 @@ async def collect_context(
     """
     if query_text and embeddings.is_configured():
         try:
-            vector = await embeddings.embed_one(query_text)
+            vector = await embeddings.embed_one(query_text) #转成向量
             documents = await vectorstore.query(
                 couple_id, target_user_id, vector, settings.RAG_TOP_K
-            )
+            )   #去检索
             if documents:
                 return documents
             logger.info(
@@ -106,4 +106,4 @@ async def collect_context(
         except Exception as exc:  # noqa: BLE001 - 检索失败不应阻断对话
             logger.warning("rag.query_failed", error=repr(exc))
 
-    return await recent_context(session, couple_id, target_user_id)
+    return await recent_context(session, couple_id, target_user_id) #兜底用
