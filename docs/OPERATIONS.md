@@ -109,6 +109,18 @@ uv run python scripts/reindex_user.py <couple_id> <user_id>
 - 撤销模拟TA 授权、注销账号会自动删除对应向量
 - embedding 没配置时检索会退回「最近记录」，功能仍可用
 
+### 会话历史
+
+AI 多轮对话的消息保存在 `agent_conversations` / `agent_messages`，
+默认保留 30 天，每次新消息顺延。worker 每天 04:07 清理过期数据。
+
+- 消息内容加密存储
+- 用户可以在会话设置里选择 `persist=false`，服务端不保存
+- 删除会话会连同消息一起删除
+
+如果用户要求「不留痕」，除了删会话，还要确认：
+`agent_messages`、`chunk_index`、Chroma 对应向量都已清理。
+
 ## 对象存储
 
 开发环境默认用本地目录：

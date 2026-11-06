@@ -1,0 +1,104 @@
+"""AI 对话服务的表结构。
+
+三张表：
+- agent_conversations：一次多轮对话
+- agent_messages：对话里的每条消息（加密）
+- persona_profiles：从聊天记录提炼出的风格画像
+
+会话默认保留 30 天，每次新消息顺延；过期由 worker 清理。
+"""
+
+from datetime import datetime
+
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    UniqueConstraint,
+    func,
+)
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.core.db import Base
+from app.core.types import EncryptedText
+
+
+class AgentConversation(Base):
+    __tablename__ = "agent_conversations"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    couple_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("couples.id"))
+    # 发起对话的人
+    owner_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
+    # 被模拟的人（一定是 owner 的伴侣）
+    target_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
+    # 会话标题，可能包含隐私，加密
+    title: Mapped[str | None] = mapped_column(EncryptedText)
+    # False 时不在服务端保存消息，客户端每次自己带 history
+    persist: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    # 过期时间，由 worker 定期清理
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        Index("ix_agent_conversations_owner", "owner_id", "updated_at"),
+        Index("ix_agent_conversations_expires", "expires_at"),
+    )
+
+
+class AgentMessage(Base):
+    __tablename__ = "agent_messages"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    conversation_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("agent_conversations.id", ondelete="CASCADE")
+    )
+    # user = 用户说的话，assistant = 分身回的话
+    role: Mapped[str] = mapped_column(String(20))
+    content: Mapped[str] = mapped_column(EncryptedText)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint("role IN ('user', 'assistant')", name="ck_agent_messages_role"),
+        Index("ix_agent_messages_conversation", "conversation_id", "id"),
+    )
+
+
+class PersonaProfile(Base):
+    """某个用户的说话风格画像。
+
+    由聊天记录导入后生成：
+    - style_summary：一段自然语言描述，直接进 system prompt
+    - samples_json：代表性原话，JSON 数组，加密
+    - stats：统计指标（长度、表情率等），不含原文，明文存
+    """
+
+    __tablename__ = "persona_profiles"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    couple_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("couples.id"))
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
+    style_summary: Mapped[str | None] = mapped_column(EncryptedText)
+    # JSON 数组字符串，加密
+    samples_json: Mapped[str | None] = mapped_column(EncryptedText)
+    # 纯统计，不含内容，可以明文
+    stats: Mapped[dict | None] = mapped_column(JSONB)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint("couple_id", "user_id", name="uq_persona_profile_couple_user"),
+    )

@@ -104,6 +104,12 @@ class Settings(BaseSettings):
     LOGIN_MAX_ATTEMPTS: int = 5
     LOGIN_LOCK_SECONDS: int = 900
 
+    # ---------------------------------------------------------------- Agent
+    # 会话历史保留天数；每次有新消息会顺延
+    AGENT_RETENTION_DAYS: int = 30
+    # 每次请求最多带多少轮历史（1 轮 = 用户 + 分身各一条）
+    AGENT_MAX_HISTORY_TURNS: int = 10
+
     # ---------------------------------------------------------------- 队列
     # 测试环境关掉，避免每个写操作都尝试连 Redis
     QUEUE_ENABLED: bool = True

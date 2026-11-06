@@ -18,6 +18,7 @@ from app.core.db import SessionLocal
 from app.core.logging import configure_logging
 from app.core.metrics import COIN_RECONCILE_MISMATCHES
 from app.core.tracing import setup_tracing
+from app.modules.agent import service as agent_service
 from app.modules.ai import indexing
 from app.modules.coins import service as coin_service
 from app.modules.secrets import service as secret_service
@@ -74,6 +75,16 @@ async def purge_burned_secrets(ctx: dict) -> int:
         return count
 
 
+async def cleanup_agent_conversations(ctx: dict) -> int:
+    """删除过期会话和消息，返回清理数量。"""
+    with tracer.start_as_current_span("worker.cleanup_agent_conversations"):
+        async with SessionLocal() as session:
+            count = await agent_service.cleanup_expired(session)
+
+        logger.info("清理过期会话 %d 个", count)
+        return count
+
+
 async def index_diary(ctx: dict, diary_id: int) -> None:
     """重建一篇日记的向量索引。"""
     with tracer.start_as_current_span("worker.index_diary"):
@@ -125,5 +136,6 @@ class WorkerSettings:
     cron_jobs = [
         cron(reconcile_coins, hour=3, minute=17),
         cron(purge_burned_secrets, hour=3, minute=41),
+        cron(cleanup_agent_conversations, hour=4, minute=7),
     ]
     redis_settings = RedisSettings.from_dsn(settings.REDIS_URL)

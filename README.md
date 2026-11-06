@@ -97,6 +97,7 @@ app/modules/<name>/
 | 每日一问 | `/api/v1/daily` | 固定题库，每天一题 |
 | 模拟TA | `/api/v1/sim-ta` | 授权、忠实度、对话 |
 | 上传 | `/api/v1/uploads` | 日记图片上传、删除 |
+| AI 对话 | `/api/v1/agent` | 多轮人格对话、会话管理 |
 | 审计 | `/api/v1/audit` | 敏感操作记录 |
 | 通知 | `/api/v1/notifications` | 站内通知、未读数、已读 |
 | 隐私 | `/api/v1/privacy` | 注销账号、导出个人数据 |
@@ -182,6 +183,31 @@ EMBEDDING_MODEL=...
 ```bash
 uv run python scripts/reindex_user.py <couple_id> <user_id>
 ```
+
+## AI 多轮对话
+
+模拟TA 的对话入口是 `/api/v1/agent`，不是单次问答：
+
+```
+POST /agent/conversations                 新建会话
+POST /agent/conversations/{id}/messages   发一条消息
+GET  /agent/conversations/{id}            查看历史
+DELETE /agent/conversations/{id}          删除会话和消息
+```
+
+每轮流程：
+
+1. 读取最近 10 轮历史（服务端保存，或客户端自带）
+2. 用当前问题做 RAG 检索
+3. system prompt = 风格画像 + 典型发言 + 检索结果 + 规则
+4. 调模型，回复约束成微信式短句
+
+会话策略：
+
+- 默认服务端保存，30 天过期，每次新消息顺延
+- `persist=false` 时服务端不存消息，客户端每次带 `history`
+- 删除会话会连同消息一起删
+- worker 每天 04:07 清理过期会话
 
 ## 开发进度
 

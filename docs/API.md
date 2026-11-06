@@ -94,6 +94,7 @@ Base URL: https://<你的域名>/api/v1
 | 10004 | 403 | 只能修改自己记的账 |
 | 11001 | 503 | AI 服务尚未配置 |
 | 11003 | 503 | AI 服务暂时不可用 |
+| 11004 | 503 | embedding 尚未配置 |
 | 12001 | 409 | 已经有一个进行中的对话 |
 | 12002 | 404 | 对话不存在 |
 | 12003 | 409 | 这段对话已经不在交流阶段了 |
@@ -114,6 +115,7 @@ Base URL: https://<你的域名>/api/v1
 | 16002 | 413 | 图片太大了 |
 | 16003 | 400 | 文件为空 |
 | 16004 | 403 | 无权删除这个文件 |
+| 17001 | 404 | 会话不存在 |
 
 > `429` 为限流；`500` 为未捕获异常，前端统一提示稍后重试。
 
@@ -121,6 +123,11 @@ Base URL: https://<你的域名>/api/v1
 
 | 模块 | 方法 | 路径 | 说明 | 鉴权 |
 |---|---|---|---|---|
+| agent | GET | `/api/v1/agent/conversations` | 我发起过的会话，按最近活动排序。 | 是 |
+| agent | POST | `/api/v1/agent/conversations` | 新建会话，被模拟对象固定为伴侣。 | 是 |
+| agent | GET | `/api/v1/agent/conversations/{conversation_id}` | 会话详情，包含消息记录。 | 是 |
+| agent | DELETE | `/api/v1/agent/conversations/{conversation_id}` | 删除会话及其全部消息。 | 是 |
+| agent | POST | `/api/v1/agent/conversations/{conversation_id}/messages` | 发送一条消息，返回分身的回复。 | 是 |
 | audit | GET | `/api/v1/audit` | 查看自己发起过的敏感操作，时间倒序。 | 是 |
 | auth | POST | `/api/v1/auth/login` | 手机号 + 密码登录。 | 否 |
 | auth | POST | `/api/v1/auth/logout` | 登出当前设备：吊销传入的 refresh token。 | 否 |
@@ -201,6 +208,117 @@ Base URL: https://<你的域名>/api/v1
 | ops | GET | `/metrics` | Prometheus 指标端点。 | 否 |
 
 ## 接口详情
+
+### agent
+
+#### `GET /api/v1/agent/conversations`
+
+我发起过的会话，按最近活动排序。
+
+**响应 data**
+
+| 字段 | 类型 | 必填 |
+|---|---|---|
+| `id` | int | 是 |
+| `target_id` | int | 是 |
+| `title` | string? | 是 |
+| `persist` | bool | 是 |
+| `created_at` | datetime | 是 |
+| `updated_at` | datetime | 是 |
+| `expires_at` | datetime | 是 |
+
+---
+
+#### `POST /api/v1/agent/conversations`
+
+新建会话，被模拟对象固定为伴侣。
+
+**请求体**
+
+| 字段 | 类型 | 必填 |
+|---|---|---|
+| `title` | string? | 否 |
+| `persist` | bool | 否 |
+
+**响应 data**
+
+| 字段 | 类型 | 必填 |
+|---|---|---|
+| `id` | int | 是 |
+| `target_id` | int | 是 |
+| `title` | string? | 是 |
+| `persist` | bool | 是 |
+| `created_at` | datetime | 是 |
+| `updated_at` | datetime | 是 |
+| `expires_at` | datetime | 是 |
+
+---
+
+#### `GET /api/v1/agent/conversations/{conversation_id}`
+
+会话详情，包含消息记录。
+
+**参数**
+
+| 位置 | 名称 | 类型 | 必填 |
+|---|---|---|---|
+| path | `conversation_id` | int | 是 |
+
+**响应 data**
+
+| 字段 | 类型 | 必填 |
+|---|---|---|
+| `id` | int | 是 |
+| `target_id` | int | 是 |
+| `title` | string? | 是 |
+| `persist` | bool | 是 |
+| `created_at` | datetime | 是 |
+| `updated_at` | datetime | 是 |
+| `expires_at` | datetime | 是 |
+| `messages` | app__modules__agent__schemas__MessageOut[] | 是 |
+
+---
+
+#### `DELETE /api/v1/agent/conversations/{conversation_id}`
+
+删除会话及其全部消息。
+
+**参数**
+
+| 位置 | 名称 | 类型 | 必填 |
+|---|---|---|---|
+| path | `conversation_id` | int | 是 |
+
+**响应 data**：`null` / `object`（见实现）
+
+---
+
+#### `POST /api/v1/agent/conversations/{conversation_id}/messages`
+
+发送一条消息，返回分身的回复。
+
+**参数**
+
+| 位置 | 名称 | 类型 | 必填 |
+|---|---|---|---|
+| path | `conversation_id` | int | 是 |
+
+**请求体**
+
+| 字段 | 类型 | 必填 |
+|---|---|---|
+| `message` | string | 是 |
+| `history` | ChatTurn[] | 否 |
+
+**响应 data**
+
+| 字段 | 类型 | 必填 |
+|---|---|---|
+| `conversation_id` | int | 是 |
+| `reply` | string | 是 |
+| `disclaimer` | string | 是 |
+
+---
 
 ### audit
 
@@ -691,7 +809,7 @@ Base URL: https://<你的域名>/api/v1
 | `status` | string | 是 |
 | `started_at` | datetime | 是 |
 | `ended_at` | datetime? | 是 |
-| `messages` | MessageOut[] | 是 |
+| `messages` | app__modules__conflicts__schemas__MessageOut[] | 是 |
 | `reviews` | ReviewOut[] | 是 |
 
 ---
@@ -758,7 +876,7 @@ Base URL: https://<你的域名>/api/v1
 
 | 字段 | 类型 | 必填 |
 |---|---|---|
-| `message` | MessageOut | 是 |
+| `message` | app__modules__conflicts__schemas__MessageOut | 是 |
 | `gentle_prompt` | string? | 否 |
 
 ---

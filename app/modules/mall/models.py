@@ -36,11 +36,12 @@ class MallItem(Base):
     __tablename__ = "mall_items"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    # 归属哪一对情侣，只有这俩人能操作
     couple_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("couples.id"))
-    # 服务提供方，也是审批时不能自审的人
+    # 服务提供方，也是审批时不能自审的人；同时也是上架提议人
     creator_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
-    title: Mapped[str] = mapped_column(String(100))
-    description: Mapped[str | None] = mapped_column(Text)
+    title: Mapped[str] = mapped_column(String(100))     # 商品名字
+    description: Mapped[str | None] = mapped_column(Text)       # 描述
     # 创建者建议价
     price_coins: Mapped[int] = mapped_column(BigInteger)
     # 审批后最终价；审批人可以直接沿用建议价

@@ -162,11 +162,11 @@ async def buy(
     try:
         await coin_service.spend_locked(
             session,
-            couple_id=couple.id,
-            spender_id=buyer_id,
-            amount=price,
-            ref_type="mall_item",
-            ref_id=item.id,
+            couple_id=couple.id,    #这笔消费属于哪一对情侣，用来隔离数据、查账单
+            spender_id=buyer_id,    #花钱的人：买家id（谁扣余额）
+            amount=price,           #扣多少金币：就是前面算出来的快照价格
+            ref_type="mall_item",   #这笔钱是因为什么业务扣的：mall_item = 商城兑换商品
+            ref_id=item.id,         #关联业务单据id：是哪个商品
         )
         order = await repo.create_order(
             session,
