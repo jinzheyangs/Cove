@@ -146,6 +146,47 @@ class ChatMessage(Base):
     )
 
 
+class AgentAction(Base):
+    """Agent 提议的写操作，等待用户确认。
+
+    模型只能创建 pending，不能直接执行。
+    真正的写入由确认接口触发，保证是用户本人点的。
+    """
+
+    __tablename__ = "agent_actions"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    conversation_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("agent_conversations.id", ondelete="CASCADE")
+    )
+    # 发起对话的人，也只有这个人能确认
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
+    # create_todo / create_diary ...
+    type: Mapped[str] = mapped_column(String(30))
+    # 操作参数，JSON 字符串，加密存储
+    payload: Mapped[str] = mapped_column(EncryptedText)
+    # 执行结果，JSON 字符串，加密存储；用于幂等重放
+    result: Mapped[str | None] = mapped_column(EncryptedText)
+    # pending / confirmed / cancelled / expired
+    status: Mapped[str] = mapped_column(
+        String(20), default="pending", server_default="pending"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'confirmed', 'cancelled', 'expired')",
+            name="ck_agent_actions_status",
+        ),
+        Index("ix_agent_actions_conversation", "conversation_id"),
+        Index("ix_agent_actions_user_status", "user_id", "status"),
+    )
+
+
 class PersonaProfile(Base):
     """某个用户的说话风格画像。
 

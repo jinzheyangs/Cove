@@ -193,6 +193,8 @@ POST /agent/conversations                        新建会话
 POST /agent/conversations/{id}/messages/stream   发消息，SSE 流式返回
 GET  /agent/conversations/{id}                   查看历史
 DELETE /agent/conversations/{id}                 删除会话和消息
+POST /agent/actions/{id}/confirm                 确认 Agent 提议的写操作
+POST /agent/actions/{id}/cancel                  取消提议
 ```
 
 只有一个对话接口，流式返回，工具调用也在同一个流里。
@@ -203,6 +205,7 @@ SSE 事件类型：
 |---|---|
 | `delta` | 文本片段，直接追加到气泡 |
 | `tool` | 工具状态：`running` / `done`，只含名称和可读标签 |
+| `confirm` | 待确认的写操作：`action_id`、标题、分类、有效期 |
 | `done` | 本轮结束 |
 | `error` | 出错，带业务错误码 |
 
@@ -242,9 +245,34 @@ Agent 可以调用的只读工具：
 | `list_mall_items` | 已上架商品 |
 | `list_todos` | 未完成的共同清单 |
 | `get_today_question` | 今日一问 |
+| `propose_create_todo` | 提议添加共同清单（需用户确认） |
 
-写操作（加清单、写日记）需要用户二次确认，暂未开放。
 每轮最多 5 次工具调用，防止模型死循环。
+
+### 写操作确认
+
+Agent 不能直接写数据。它只能提出一个待确认动作：
+
+```
+模型调用 propose_create_todo
+    ↓
+服务端只创建 pending 动作，不写清单
+    ↓
+SSE 推 confirm 事件
+    ↓
+客户端展示确认卡片
+    ↓
+用户点确认 → POST /agent/actions/{id}/confirm
+    ↓
+这时才真正写入清单
+```
+
+规则：
+
+- 只有发起动作的人能确认
+- 重复确认是幂等的，不会写两条
+- 10 分钟未确认自动过期
+- 删除会话会一并删掉待确认动作
 
 会话策略：
 

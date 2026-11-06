@@ -3781,6 +3781,102 @@
         }
       }
     },
+    "/api/v1/agent/actions/{action_id}/confirm": {
+      "post": {
+        "tags": [
+          "agent"
+        ],
+        "summary": "Confirm Action",
+        "description": "确认 Agent 提议的写操作。\n\n只有发起动作的人能确认；重复确认是幂等的，不会重复写入。",
+        "operationId": "confirm_action_api_v1_agent_actions__action_id__confirm_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "action_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Action Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ActionOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/agent/actions/{action_id}/cancel": {
+      "post": {
+        "tags": [
+          "agent"
+        ],
+        "summary": "Cancel Action",
+        "description": "取消 Agent 提议的写操作。不会产生任何写入。",
+        "operationId": "cancel_action_api_v1_agent_actions__action_id__cancel_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "action_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Action Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ActionOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health",
@@ -3843,6 +3939,42 @@
   },
   "components": {
     "schemas": {
+      "ActionOut": {
+        "properties": {
+          "action_id": {
+            "type": "integer",
+            "title": "Action Id"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          }
+        },
+        "type": "object",
+        "required": [
+          "action_id",
+          "type",
+          "status"
+        ],
+        "title": "ActionOut",
+        "description": "待确认动作的处理结果。"
+      },
       "AnswerCreate": {
         "properties": {
           "answer": {
@@ -5030,6 +5162,32 @@
         "type": "object",
         "title": "DiaryUpdate",
         "description": "部分更新。\n\n所有字段都是可选的，service 用 exclude_unset 只改传了的字段，\n这样“只改标题”不会把正文清空。"
+      },
+      "Envelope_ActionOut_": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 0
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "success"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ActionOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "Envelope[ActionOut]"
       },
       "Envelope_ApplyOut_": {
         "properties": {

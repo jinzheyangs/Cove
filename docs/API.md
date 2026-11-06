@@ -124,6 +124,10 @@ Base URL: https://<你的域名>/api/v1
 | 17007 | 404 | 导入记录不存在 |
 | 17008 | 400 | 只识别到一方的消息，请检查 owner_name / partner_name 是否和文件里的名字一致 |
 | 17009 | 400 | 没有可导入的消息 |
+| 17010 | 410 | 确认已过期，请重新发起 |
+| 17011 | 404 | 操作不存在 |
+| 17012 | 409 | 这个操作已经不能确认了 |
+| 17013 | 400 | 不支持的操作类型 |
 
 > `429` 为限流；`500` 为未捕获异常，前端统一提示稍后重试。
 
@@ -131,6 +135,8 @@ Base URL: https://<你的域名>/api/v1
 
 | 模块 | 方法 | 路径 | 说明 | 鉴权 |
 |---|---|---|---|---|
+| agent | POST | `/api/v1/agent/actions/{action_id}/cancel` | 取消 Agent 提议的写操作。不会产生任何写入。 | 是 |
+| agent | POST | `/api/v1/agent/actions/{action_id}/confirm` | 确认 Agent 提议的写操作。 | 是 |
 | agent | GET | `/api/v1/agent/conversations` | 我发起过的会话，按最近活动排序。 | 是 |
 | agent | POST | `/api/v1/agent/conversations` | 新建会话，被模拟对象固定为伴侣。 | 是 |
 | agent | GET | `/api/v1/agent/conversations/{conversation_id}` | 会话详情，包含消息记录。 | 是 |
@@ -222,6 +228,48 @@ Base URL: https://<你的域名>/api/v1
 ## 接口详情
 
 ### agent
+
+#### `POST /api/v1/agent/actions/{action_id}/cancel`
+
+取消 Agent 提议的写操作。不会产生任何写入。
+
+**参数**
+
+| 位置 | 名称 | 类型 | 必填 |
+|---|---|---|---|
+| path | `action_id` | int | 是 |
+
+**响应 data**
+
+| 字段 | 类型 | 必填 |
+|---|---|---|
+| `action_id` | int | 是 |
+| `type` | string | 是 |
+| `status` | string | 是 |
+| `result` | object? | 否 |
+
+---
+
+#### `POST /api/v1/agent/actions/{action_id}/confirm`
+
+确认 Agent 提议的写操作。
+
+**参数**
+
+| 位置 | 名称 | 类型 | 必填 |
+|---|---|---|---|
+| path | `action_id` | int | 是 |
+
+**响应 data**
+
+| 字段 | 类型 | 必填 |
+|---|---|---|
+| `action_id` | int | 是 |
+| `type` | string | 是 |
+| `status` | string | 是 |
+| `result` | object? | 否 |
+
+---
 
 #### `GET /api/v1/agent/conversations`
 

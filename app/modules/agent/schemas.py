@@ -58,6 +58,15 @@ class ConversationDetailOut(ConversationOut):
     messages: list[MessageOut]
 
 
+class ActionOut(BaseModel):
+    """待确认动作的处理结果。"""
+
+    action_id: int
+    type: str
+    status: str
+    result: dict | None = None
+
+
 class ChatImportOut(BaseModel):
     """一次聊天记录导入的状态。"""
 

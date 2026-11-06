@@ -15,8 +15,9 @@ from app.core.db import SessionLocal
 from app.core.deps import CurrentUser, SessionDep
 from app.core.errors import AppError
 from app.core.schemas import Envelope
-from app.modules.agent import import_service, importers, service
+from app.modules.agent import actions, import_service, importers, service
 from app.modules.agent.schemas import (
+    ActionOut,
     ChatImportOut,
     ChatIn,
     ConversationCreate,
@@ -187,6 +188,8 @@ async def chat_stream(
                         yield _sse("delta", {"delta": payload})
                     elif kind == "tool":
                         yield _sse("tool", payload)
+                    elif kind == "confirm":
+                        yield _sse("confirm", payload)
                 yield _sse("done", {"conversation_id": conversation_id})
             except AppError as exc:
                 yield _sse("error", {"code": exc.code, "message": exc.message})
@@ -195,4 +198,44 @@ async def chat_stream(
         event_stream(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/actions/{action_id}/confirm", response_model=Envelope[ActionOut])
+async def confirm_action(
+    action_id: int,
+    user: CurrentUser,
+    couple: CurrentCouple,
+    session: SessionDep,
+) -> Envelope[ActionOut]:
+    """确认 Agent 提议的写操作。
+
+    只有发起动作的人能确认；重复确认是幂等的，不会重复写入。
+    """
+    action, result = await actions.confirm(session, couple, user, action_id)
+    return Envelope(
+        data=ActionOut(
+            action_id=action.id,
+            type=action.type,
+            status=action.status,
+            result=result,
+        )
+    )
+
+
+@router.post("/actions/{action_id}/cancel", response_model=Envelope[ActionOut])
+async def cancel_action(
+    action_id: int,
+    user: CurrentUser,
+    couple: CurrentCouple,
+    session: SessionDep,
+) -> Envelope[ActionOut]:
+    """取消 Agent 提议的写操作。不会产生任何写入。"""
+    action = await actions.cancel(session, couple, user, action_id)
+    return Envelope(
+        data=ActionOut(
+            action_id=action.id,
+            type=action.type,
+            status=action.status,
+        )
     )

@@ -1,7 +1,7 @@
 """Agent 可以调用的工具。
 
-第一版全部只读：查记忆、关系、金币、商城、清单、每日一问。
-写操作（加清单、写日记）需要用户二次确认，留到下一版。
+读工具：查记忆、关系、金币、商城、清单、每日一问，直接执行。
+写工具：只创建「待确认动作」，用户点确认后才真正写入。
 
 每个工具返回 JSON 字符串，直接作为 role=tool 的消息回给模型。
 """
@@ -11,6 +11,8 @@ from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.agent import actions
+from app.modules.agent.models import AgentConversation
 from app.modules.ai import retrieval
 from app.modules.coins import repository as coin_repo
 from app.modules.couples.models import Couple
@@ -77,6 +79,31 @@ TOOL_SCHEMAS = [
             "parameters": {"type": "object", "properties": {}},
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "propose_create_todo",
+            "description": (
+                "当用户明确要求把某件事加入共同清单时，提议创建一条待确认的清单项。"
+                "不要直接创建——用户确认后才会真的写入。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "清单标题"},
+                    "category": {
+                        "type": "string",
+                        "description": (
+                            "分类：想去的地方 / 想一起学的技能 / "
+                            "想改掉的习惯 / 想实现的约定"
+                        ),
+                    },
+                    "description": {"type": "string", "description": "补充说明，可选"},
+                },
+                "required": ["title"],
+            },
+        },
+    },
 ]
 
 
@@ -140,6 +167,40 @@ async def _get_today_question(session, couple, user, target_id, args) -> dict:
     }
 
 
+async def _propose_create_todo(
+    session, couple, user, conversation, args
+) -> dict:
+    """创建一个待确认的清单动作，不直接写清单。"""
+    if conversation is None:
+        return {"error": "缺少会话上下文"}
+
+    title = str(args.get("title", "")).strip()
+    if not title:
+        return {"error": "title 不能为空"}
+
+    category = str(args.get("category") or "想实现的约定").strip()
+    description = args.get("description")
+
+    action = await actions.create_pending(
+        session,
+        conversation,
+        user,
+        "create_todo",
+        {
+            "title": title,
+            "category": category,
+            "description": description,
+        },
+    )
+    return {
+        "status": "pending_confirmation",
+        "type": "create_todo",
+        "action_id": action.id,
+        "title": title,
+        "category": category,
+    }
+
+
 # 流式对话里展示给用户的可读状态，不带任何工具结果
 TOOL_LABELS = {
     "search_memories": "正在查记忆",
@@ -148,6 +209,7 @@ TOOL_LABELS = {
     "list_mall_items": "正在查商城",
     "list_todos": "正在查清单",
     "get_today_question": "正在查今日一问",
+    "propose_create_todo": "准备添加清单",
 }
 
 
@@ -169,17 +231,23 @@ async def execute_tool(
     couple: Couple,
     user: User,
     target_id: int,
+    conversation: AgentConversation | None = None,
 ) -> str:
     """执行工具，返回 JSON 字符串。
 
+    读工具直接执行；写工具只创建待确认动作。
     工具内部异常不会中断对话，转成 error 字段让模型自己处理。
     """
-    handler = _HANDLERS.get(name)
-    if handler is None:
-        return json.dumps({"error": f"未知工具: {name}"}, ensure_ascii=False)
-
     try:
-        result = await handler(session, couple, user, target_id, args)
+        if name == "propose_create_todo":
+            result = await _propose_create_todo(
+                session, couple, user, conversation, args
+            )
+        else:
+            handler = _HANDLERS.get(name)
+            if handler is None:
+                return json.dumps({"error": f"未知工具: {name}"}, ensure_ascii=False)
+            result = await handler(session, couple, user, target_id, args)
     except Exception as exc:  # noqa: BLE001 - 工具失败不应中断对话
         return json.dumps({"error": str(exc)}, ensure_ascii=False)
 

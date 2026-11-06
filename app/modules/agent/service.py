@@ -20,8 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.errors import AppError
+from app.modules.agent import actions, tools
 from app.modules.agent import repository as repo
-from app.modules.agent import tools
 from app.modules.agent.models import AgentConversation, PersonaProfile
 from app.modules.agent.schemas import (
     ChatTurn,
@@ -108,8 +108,9 @@ async def get_detail(
 async def delete_conversation(
     session: AsyncSession, couple: Couple, user: User, conversation_id: int
 ) -> None:
-    """删除会话及其全部消息。"""
+    """删除会话及其全部消息、待确认动作。"""
     conversation = await _get_owned(session, couple, user, conversation_id)
+    await actions.delete_for_conversation(session, conversation.id)
     await repo.delete_messages(session, conversation.id)
     await repo.delete_conversation(session, conversation)
     await session.commit()
@@ -258,6 +259,7 @@ async def stream_reply(
                 couple=couple,
                 user=user,
                 target_id=conversation.target_id,
+                conversation=conversation,
             )
             messages.append(
                 {
@@ -274,6 +276,24 @@ async def stream_reply(
                     "status": "done",
                 },
             )
+
+            # 写工具不会直接执行，只返回一个待确认动作。
+            # 把动作信息推给前端，由用户点击确认。
+            try:
+                parsed = json.loads(output)
+            except json.JSONDecodeError:
+                parsed = {}
+            if parsed.get("status") == "pending_confirmation":
+                yield (
+                    "confirm",
+                    {
+                        "action_id": parsed["action_id"],
+                        "type": parsed.get("type"),
+                        "title": parsed.get("title"),
+                        "category": parsed.get("category"),
+                        "expires_in": actions.EXPIRES_IN_SECONDS,
+                    },
+                )
     else:
         # 达到上限仍然没有给出文本，兜底一句，避免空回复
         fallback = "我想了一下，你再说具体一点？"
