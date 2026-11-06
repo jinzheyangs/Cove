@@ -43,7 +43,7 @@ groups:
           severity: warning
         annotations:
           summary: "AI 熔断器已打开"
-          description: "大模型调用连续失败，询问中心和模拟TA 进入降级状态。"
+          description: "大模型调用连续失败，模拟TA 和 Agent 进入降级状态。"
 
       - alert: CoveAiHighFailureRate
         expr: |

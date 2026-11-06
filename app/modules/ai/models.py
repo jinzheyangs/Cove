@@ -28,7 +28,7 @@ class ChunkIndex(Base):
     couple_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("couples.id"))
     # 内容作者。检索时按这个过滤，保证只拿被模拟者自己的记录
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
-    # diary / review
+    # diary / chat
     source_type: Mapped[str] = mapped_column(String(30))
     source_id: Mapped[int] = mapped_column(BigInteger)
     chunk_no: Mapped[int] = mapped_column(BigInteger)

@@ -23,13 +23,6 @@ TARGETS = [
     ("secrets", "content"),
     ("diaries", "title"),
     ("diaries", "content"),
-    ("conflict_messages", "content"),
-    ("conflict_reviews", "want_to_be_understood"),
-    ("conflict_reviews", "heard_partner_need"),
-    ("inquiry_sessions", "question"),
-    ("inquiry_sessions", "ai_response"),
-    ("inquiry_inputs", "content"),
-    ("inquiry_supplements", "content"),
     ("daily_answers", "answer"),
     ("bills", "remark"),
 ]
