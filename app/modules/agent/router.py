@@ -168,9 +168,9 @@ async def chat_stream(
     先在普通请求里完成归属和授权校验，错误能以正常 HTTP 状态返回；
     校验通过后再切换成事件流。
     """
-    await service.validate_for_chat(session, couple, user, conversation_id)
-    couple_id = couple.id
-    user_id = user.id
+    await service.validate_for_chat(session, couple, user, conversation_id)     #对话检验
+    couple_id = couple.id       #情侣id
+    user_id = user.id           #发起id
 
     async def event_stream():
         # 流式响应会超出请求依赖的生命周期，所以自己开一个会话

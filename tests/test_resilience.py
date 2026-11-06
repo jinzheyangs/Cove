@@ -9,7 +9,6 @@ from app.core.errors import AppError
 from app.main import app
 from app.modules.ai import client as ai_client
 from app.modules.ai.breaker import CLOSED, HALF_OPEN, OPEN, CircuitBreaker
-from app.modules.inquiries import service as inquiry_service
 from app.modules.simta import service as simta_service
 from tests.helpers import seed_couple
 
@@ -47,24 +46,6 @@ def test_breaker_half_opens_then_closes():
 
     breaker.record_success()
     assert breaker.current_state() == CLOSED
-
-
-async def test_inquiry_degrades_when_ai_unavailable(session, monkeypatch):
-    a, b, couple = await seed_couple(session)
-    item = await inquiry_service.create(session, couple, "要不要养猫")
-    await inquiry_service.submit_input(session, couple, a, item.id, "想养")
-    await inquiry_service.submit_input(session, couple, b, item.id, "担心麻烦")
-
-    async def boom(*, system: str, user: str) -> str:
-        raise AppError("AI 服务暂时不可用", code=11003, status_code=503)
-
-    monkeypatch.setattr(ai_client, "complete", boom)
-
-    with pytest.raises(AppError) as exc:
-        await inquiry_service.generate(session, couple, item.id)
-
-    assert exc.value.code == 13007
-    assert "想法已经保存" in exc.value.message
 
 
 async def test_simta_degrades_when_ai_unavailable(session, monkeypatch):

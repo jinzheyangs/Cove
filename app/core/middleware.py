@@ -132,7 +132,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if path.startswith("/api/v1/auth"):
             limit = settings.AUTH_RATE_LIMIT_REQUESTS
             bucket = "auth"
-        elif path.startswith("/api/v1/inquiries") or path.startswith("/api/v1/sim-ta"):
+        elif path.startswith("/api/v1/sim-ta") or path.startswith("/api/v1/agent"):
             limit = settings.AI_RATE_LIMIT_REQUESTS
             bucket = "ai"
 

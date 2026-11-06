@@ -11,10 +11,8 @@ from app.modules.audit.models import AuditLog
 from app.modules.bills.models import Bill
 from app.modules.coin_applies.models import CoinApply
 from app.modules.coins.models import CoinTransaction
-from app.modules.conflicts.models import ConflictMessage, ConflictReview
 from app.modules.daily.models import DailyAnswer
 from app.modules.diaries.models import Diary
-from app.modules.inquiries.models import InquiryInput, InquirySupplement
 from app.modules.notifications.models import Notification
 from app.modules.secrets.models import Secret
 from app.modules.simta.models import PersonaConsent, PersonaSettings
@@ -24,7 +22,7 @@ from app.modules.todos.models import TodoItem
 async def purge_personal_content(session: AsyncSession, user_id: int) -> None:
     """删除用户自己产生的内容。
 
-    删除范围：秘密、日记、账本、清单、每日一问、询问中心、争吵、模拟TA 授权、通知、审计。
+    删除范围：秘密、日记、账本、清单、每日一问、模拟TA 授权、通知、审计。
     这些都是「这个人写下的东西」。
 
     **保留**金币流水和商城记录：
@@ -40,10 +38,6 @@ async def purge_personal_content(session: AsyncSession, user_id: int) -> None:
         (Bill, Bill.payer_id),
         (TodoItem, TodoItem.creator_id),
         (DailyAnswer, DailyAnswer.user_id),
-        (InquiryInput, InquiryInput.user_id),
-        (InquirySupplement, InquirySupplement.user_id),
-        (ConflictReview, ConflictReview.user_id),
-        (ConflictMessage, ConflictMessage.user_id),
         (PersonaConsent, PersonaConsent.user_id),
         (PersonaSettings, PersonaSettings.owner_id),
         (CoinApply, CoinApply.applicant_id),
@@ -86,27 +80,6 @@ async def collect_export(session: AsyncSession, user_id: int) -> dict[str, list]
             select(DailyAnswer).where(DailyAnswer.user_id == user_id).order_by(DailyAnswer.id)
         )
     )
-    reviews = list(
-        await session.scalars(
-            select(ConflictReview)
-            .where(ConflictReview.user_id == user_id)
-            .order_by(ConflictReview.id)
-        )
-    )
-    inputs = list(
-        await session.scalars(
-            select(InquiryInput)
-            .where(InquiryInput.user_id == user_id)
-            .order_by(InquiryInput.id)
-        )
-    )
-    supplements = list(
-        await session.scalars(
-            select(InquirySupplement)
-            .where(InquirySupplement.user_id == user_id)
-            .order_by(InquirySupplement.id)
-        )
-    )
     transactions = list(
         await session.scalars(
             select(CoinTransaction)
@@ -127,8 +100,5 @@ async def collect_export(session: AsyncSession, user_id: int) -> dict[str, list]
         "bills": bills,
         "todos": todos,
         "daily": daily,
-        "reviews": reviews,
-        "inputs": inputs,
-        "supplements": supplements,
         "transactions": transactions,
     }

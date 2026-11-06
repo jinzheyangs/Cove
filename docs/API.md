@@ -98,19 +98,6 @@ Base URL: https://<你的域名>/api/v1
 | 11001 | 503 | AI 服务尚未配置 |
 | 11003 | 503 | AI 服务暂时不可用 |
 | 11004 | 503 | embedding 尚未配置 |
-| 12001 | 409 | 已经有一个进行中的对话 |
-| 12002 | 404 | 对话不存在 |
-| 12003 | 409 | 这段对话已经不在交流阶段了 |
-| 12004 | 409 | 只有进行中的对话可以进入冷静期 |
-| 12005 | 409 | 当前状态不能结束对话 |
-| 12006 | 409 | 现在还不能复盘，请先结束这段对话 |
-| 13001 | 409 | 已经进入下一阶段，不能修改了 |
-| 13002 | 409 | 这个询问已经生成过了 |
-| 13003 | 409 | 双方都写完之后才能生成 |
-| 13004 | 409 | 现在还不能补充意见 |
-| 13005 | 409 | 当前状态不能关闭 |
-| 13006 | 404 | 询问不存在 |
-| 13007 | 503 | AI 分析暂时不可用，双方的想法已经保存，稍后再试 |
 | 14001 | 403 | 对方还没有授权把 TA 的数据用于模拟 |
 | 14002 | 503 | TA 的数字分身暂时连不上。真人一直在。 |
 | 15001 | 403 | 密码错误 |
@@ -169,12 +156,6 @@ Base URL: https://<你的域名>/api/v1
 | coins | GET | `/api/v1/coins/balance` | 查询自己的金币余额。没绑定伴侣也可以查。 | 是 |
 | coins | POST | `/api/v1/coins/gift` | 给对方赠币。 | 是 |
 | coins | GET | `/api/v1/coins/transactions` | 分页查询自己的流水。 | 是 |
-| conflicts | POST | `/api/v1/conflicts` | 发起会话。同一时间只能有一个未关闭的会话。 | 是 |
-| conflicts | GET | `/api/v1/conflicts/{session_id}` | 查看会话详情：消息和复盘。 | 是 |
-| conflicts | POST | `/api/v1/conflicts/{session_id}/cool` | 进入冷静期。 | 是 |
-| conflicts | POST | `/api/v1/conflicts/{session_id}/end` | 结束交流，进入复盘阶段。 | 是 |
-| conflicts | POST | `/api/v1/conflicts/{session_id}/messages` | 发送消息。 | 是 |
-| conflicts | POST | `/api/v1/conflicts/{session_id}/review` | 提交复盘。 | 是 |
 | couples | POST | `/api/v1/couples/bind` | 用对方的邀请码完成绑定。 | 是 |
 | couples | POST | `/api/v1/couples/invite` | 生成邀请码，交给对方输入。24 小时内有效。 | 是 |
 | couples | GET | `/api/v1/couples/me` | 查询当前关系。没绑定时 data 为 null，不是报错。 | 是 |
@@ -186,12 +167,6 @@ Base URL: https://<你的域名>/api/v1
 | diaries | GET | `/api/v1/diaries/{diary_id}` | 读取单篇。只能读到本关系内的日记。 | 是 |
 | diaries | PUT | `/api/v1/diaries/{diary_id}` | 部分更新。个人视角只有作者能改。 | 是 |
 | diaries | DELETE | `/api/v1/diaries/{diary_id}` | 删除。个人视角只有作者能删。 | 是 |
-| inquiries | POST | `/api/v1/inquiries` | 发起询问。返回精简信息，完整内容走详情接口。 | 是 |
-| inquiries | GET | `/api/v1/inquiries/{session_id}` | 查看详情。双方都提交之前看不到彼此的内容。 | 是 |
-| inquiries | POST | `/api/v1/inquiries/{session_id}/close` | 关闭询问，形成共同记录。 | 是 |
-| inquiries | POST | `/api/v1/inquiries/{session_id}/generate` | 触发 AI 汇总。双方都提交后才允许。 | 是 |
-| inquiries | POST | `/api/v1/inquiries/{session_id}/input` | 提交自己的真实想法。collecting 阶段可反复修改。 | 是 |
-| inquiries | POST | `/api/v1/inquiries/{session_id}/supplement` | 在 AI 回复后追加补充意见。 | 是 |
 | mall | GET | `/api/v1/mall/items` | 已上架商品列表（双方都能看到同一份）。 | 是 |
 | mall | POST | `/api/v1/mall/items` | 上架商品，等待对方审批价格。 | 是 |
 | mall | GET | `/api/v1/mall/items/mine` | 我上架的商品，包含待审批 / 被拒绝 / 已下架。 | 是 |
@@ -341,7 +316,7 @@ Base URL: https://<你的域名>/api/v1
 | `created_at` | datetime | 是 |
 | `updated_at` | datetime | 是 |
 | `expires_at` | datetime | 是 |
-| `messages` | app__modules__agent__schemas__MessageOut[] | 是 |
+| `messages` | MessageOut[] | 是 |
 
 ---
 
@@ -945,141 +920,6 @@ Base URL: https://<你的域名>/api/v1
 
 ---
 
-### conflicts
-
-#### `POST /api/v1/conflicts`
-
-发起会话。同一时间只能有一个未关闭的会话。
-
-**响应 data**
-
-| 字段 | 类型 | 必填 |
-|---|---|---|
-| `id` | int | 是 |
-| `status` | string | 是 |
-| `started_at` | datetime | 是 |
-| `ended_at` | datetime? | 是 |
-
----
-
-#### `GET /api/v1/conflicts/{session_id}`
-
-查看会话详情：消息和复盘。
-
-**参数**
-
-| 位置 | 名称 | 类型 | 必填 |
-|---|---|---|---|
-| path | `session_id` | int | 是 |
-
-**响应 data**
-
-| 字段 | 类型 | 必填 |
-|---|---|---|
-| `id` | int | 是 |
-| `status` | string | 是 |
-| `started_at` | datetime | 是 |
-| `ended_at` | datetime? | 是 |
-| `messages` | app__modules__conflicts__schemas__MessageOut[] | 是 |
-| `reviews` | ReviewOut[] | 是 |
-
----
-
-#### `POST /api/v1/conflicts/{session_id}/cool`
-
-进入冷静期。
-
-**参数**
-
-| 位置 | 名称 | 类型 | 必填 |
-|---|---|---|---|
-| path | `session_id` | int | 是 |
-
-**响应 data**
-
-| 字段 | 类型 | 必填 |
-|---|---|---|
-| `id` | int | 是 |
-| `status` | string | 是 |
-| `started_at` | datetime | 是 |
-| `ended_at` | datetime? | 是 |
-
----
-
-#### `POST /api/v1/conflicts/{session_id}/end`
-
-结束交流，进入复盘阶段。
-
-**参数**
-
-| 位置 | 名称 | 类型 | 必填 |
-|---|---|---|---|
-| path | `session_id` | int | 是 |
-
-**响应 data**
-
-| 字段 | 类型 | 必填 |
-|---|---|---|
-| `id` | int | 是 |
-| `status` | string | 是 |
-| `started_at` | datetime | 是 |
-| `ended_at` | datetime? | 是 |
-
----
-
-#### `POST /api/v1/conflicts/{session_id}/messages`
-
-发送消息。
-
-**参数**
-
-| 位置 | 名称 | 类型 | 必填 |
-|---|---|---|---|
-| path | `session_id` | int | 是 |
-
-**请求体**
-
-| 字段 | 类型 | 必填 |
-|---|---|---|
-| `content` | string | 是 |
-
-**响应 data**
-
-| 字段 | 类型 | 必填 |
-|---|---|---|
-| `message` | app__modules__conflicts__schemas__MessageOut | 是 |
-| `gentle_prompt` | string? | 否 |
-
----
-
-#### `POST /api/v1/conflicts/{session_id}/review`
-
-提交复盘。
-
-**参数**
-
-| 位置 | 名称 | 类型 | 必填 |
-|---|---|---|---|
-| path | `session_id` | int | 是 |
-
-**请求体**
-
-| 字段 | 类型 | 必填 |
-|---|---|---|
-| `want_to_be_understood` | string | 是 |
-| `heard_partner_need` | string | 是 |
-
-**响应 data**
-
-| 字段 | 类型 | 必填 |
-|---|---|---|
-| `id` | int | 是 |
-| `status` | string | 是 |
-| `started_at` | datetime | 是 |
-| `ended_at` | datetime? | 是 |
-
----
-
 ### couples
 
 #### `POST /api/v1/couples/bind`
@@ -1338,117 +1178,6 @@ Base URL: https://<你的域名>/api/v1
 | 位置 | 名称 | 类型 | 必填 |
 |---|---|---|---|
 | path | `diary_id` | int | 是 |
-
-**响应 data**：`null` / `object`（见实现）
-
----
-
-### inquiries
-
-#### `POST /api/v1/inquiries`
-
-发起询问。返回精简信息，完整内容走详情接口。
-
-**请求体**
-
-| 字段 | 类型 | 必填 |
-|---|---|---|
-| `question` | string | 是 |
-
-**响应 data**：`null` / `object`（见实现）
-
----
-
-#### `GET /api/v1/inquiries/{session_id}`
-
-查看详情。双方都提交之前看不到彼此的内容。
-
-**参数**
-
-| 位置 | 名称 | 类型 | 必填 |
-|---|---|---|---|
-| path | `session_id` | int | 是 |
-
-**响应 data**
-
-| 字段 | 类型 | 必填 |
-|---|---|---|
-| `id` | int | 是 |
-| `question` | string | 是 |
-| `status` | string | 是 |
-| `ai_response` | string? | 是 |
-| `submitted_count` | int | 是 |
-| `my_input_submitted` | bool | 是 |
-| `inputs` | string[] | 是 |
-| `supplements` | string[] | 是 |
-| `created_at` | datetime | 是 |
-| `closed_at` | datetime? | 是 |
-
----
-
-#### `POST /api/v1/inquiries/{session_id}/close`
-
-关闭询问，形成共同记录。
-
-**参数**
-
-| 位置 | 名称 | 类型 | 必填 |
-|---|---|---|---|
-| path | `session_id` | int | 是 |
-
-**响应 data**：`null` / `object`（见实现）
-
----
-
-#### `POST /api/v1/inquiries/{session_id}/generate`
-
-触发 AI 汇总。双方都提交后才允许。
-
-**参数**
-
-| 位置 | 名称 | 类型 | 必填 |
-|---|---|---|---|
-| path | `session_id` | int | 是 |
-
-**响应 data**：`null` / `object`（见实现）
-
----
-
-#### `POST /api/v1/inquiries/{session_id}/input`
-
-提交自己的真实想法。collecting 阶段可反复修改。
-
-**参数**
-
-| 位置 | 名称 | 类型 | 必填 |
-|---|---|---|---|
-| path | `session_id` | int | 是 |
-
-**请求体**
-
-| 字段 | 类型 | 必填 |
-|---|---|---|
-| `content` | string | 是 |
-
-**响应 data**：`null` / `object`（见实现）
-
----
-
-#### `POST /api/v1/inquiries/{session_id}/supplement`
-
-在 AI 回复后追加补充意见。
-
-**参数**
-
-| 位置 | 名称 | 类型 | 必填 |
-|---|---|---|---|
-| path | `session_id` | int | 是 |
-
-**请求体**
-
-| 字段 | 类型 | 必填 |
-|---|---|---|
-| `content` | string | 是 |
 
 **响应 data**：`null` / `object`（见实现）
 

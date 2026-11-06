@@ -3,7 +3,7 @@
 所有 AI 请求只能从这里出去，统一做超时、重试、熔断、指标和日志。
 
 三个入口：
-- `complete(system, user)`：单轮问答，询问中心等场景使用
+- `complete(system, user)`：单轮问答，模拟TA 等场景使用
 - `complete_chat(messages)`：完整 messages 数组，非流式多轮使用
 - `stream_with_tools(messages, tools)`：流式 + 工具调用，Agent 对话使用
 """

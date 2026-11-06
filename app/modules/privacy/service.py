@@ -99,13 +99,6 @@ _TODO_FIELDS = (
     "created_at",
 )
 _DAILY_FIELDS = ("day", "question", "answer", "created_at")
-_REVIEW_FIELDS = (
-    "session_id",
-    "want_to_be_understood",
-    "heard_partner_need",
-    "created_at",
-)
-_INPUT_FIELDS = ("session_id", "content", "created_at")
 _TX_FIELDS = ("id", "type", "amount", "ref_type", "ref_id", "remark", "created_at")
 
 
@@ -121,7 +114,7 @@ async def export_data(session: AsyncSession, user: User) -> dict:
     """导出个人数据。
 
     返回一个可直接 JSON 序列化的字典：
-    资料、关系、日记、秘密、账本、清单、每日一问、复盘、询问、金币流水。
+    资料、关系、日记、秘密、账本、清单、每日一问、金币流水。
     """
     couple = await couple_repo.get_active_by_user(session, user.id)
     raw = await repo.collect_export(session, user.id)
@@ -147,8 +140,5 @@ async def export_data(session: AsyncSession, user: User) -> dict:
         "bills": [_pick(b, _BILL_FIELDS) for b in raw["bills"]],
         "todos": [_pick(t, _TODO_FIELDS) for t in raw["todos"]],
         "daily": [_pick(d, _DAILY_FIELDS) for d in raw["daily"]],
-        "conflict_reviews": [_pick(r, _REVIEW_FIELDS) for r in raw["reviews"]],
-        "inquiry_inputs": [_pick(i, _INPUT_FIELDS) for i in raw["inputs"]],
-        "inquiry_supplements": [_pick(s, _INPUT_FIELDS) for s in raw["supplements"]],
         "coin_transactions": [_pick(t, _TX_FIELDS) for t in raw["transactions"]],
     }

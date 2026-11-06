@@ -34,11 +34,9 @@ from app.modules.audit.router import router as audit_router
 from app.modules.bills.router import router as bills_router
 from app.modules.coin_applies.router import router as coin_applies_router
 from app.modules.coins.router import router as coins_router
-from app.modules.conflicts.router import router as conflicts_router
 from app.modules.couples.router import router as couples_router
 from app.modules.daily.router import router as daily_router
 from app.modules.diaries.router import router as diaries_router
-from app.modules.inquiries.router import router as inquiries_router
 from app.modules.mall.router import router as mall_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.privacy.router import router as privacy_router
@@ -108,8 +106,6 @@ app.include_router(diaries_router, prefix=API_PREFIX)
 app.include_router(todos_router, prefix=API_PREFIX)
 app.include_router(bills_router, prefix=API_PREFIX)
 app.include_router(audit_router, prefix=API_PREFIX)
-app.include_router(conflicts_router, prefix=API_PREFIX)
-app.include_router(inquiries_router, prefix=API_PREFIX)
 app.include_router(daily_router, prefix=API_PREFIX)
 app.include_router(simta_router, prefix=API_PREFIX)
 app.include_router(privacy_router, prefix=API_PREFIX)

@@ -188,14 +188,14 @@ async def stream_reply(
 
     工具调用和文本可以交替出现：模型先说一句、调工具、再接着说。
     """
-    couple = await session.get(Couple, couple_id)
-    user = await session.get(User, user_id)
+    couple = await session.get(Couple, couple_id)   #去数据库查真实记录
+    user = await session.get(User, user_id)         #去查数据库用户账户真实存在
     if couple is None or user is None:
         raise AppError("会话不存在", code=17001, status_code=404)
 
     conversation = await validate_for_chat(
         session, couple, user, conversation_id
-    )
+    )   #进行校验
     messages = await _build_messages(
         session, couple, user, conversation, message, history
     )

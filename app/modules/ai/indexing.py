@@ -1,7 +1,7 @@
 """把业务数据索引到向量库。
 
 写入链路：
-    日记 / 复盘 -> 切片 -> embedding -> Chroma
+    日记 -> 切片 -> embedding -> Chroma
     chunk_index 表记录映射关系，用于增量更新和删除同步
 
 设计原则：
@@ -20,7 +20,6 @@ from app.core.config import settings
 from app.modules.agent.models import ChatImport, ChatMessage
 from app.modules.ai import embeddings, vectorstore
 from app.modules.ai.models import ChunkIndex
-from app.modules.conflicts.models import ConflictReview, ConflictSession
 from app.modules.couples.models import Couple
 from app.modules.diaries.models import Diary
 from app.modules.users.models import User
@@ -185,42 +184,9 @@ async def index_diary(session: AsyncSession, diary_id: int) -> None:
     )
 
 
-async def index_review(session: AsyncSession, review_id: int) -> None:
-    """索引一份争吵复盘。"""
-    if not embeddings.is_configured():
-        return
-
-    review = await session.get(ConflictReview, review_id)
-    if review is None:
-        return
-
-    text = (
-        f"最想被理解：{review.want_to_be_understood}\n"
-        f"听到的需求：{review.heard_partner_need}"
-    )
-    # 复盘没有直接存 couple_id，需要通过 session 关联查一次
-    conflict = await session.get(ConflictSession, review.session_id)
-    if conflict is None:
-        return
-
-    await _replace_source(
-        session,
-        couple_id=conflict.couple_id,
-        user_id=review.user_id,
-        source_type="review",
-        source_id=review.id,
-        text=text,
-    )
-
-
 async def delete_diary_vectors(session: AsyncSession, diary_id: int) -> None:
     """删除一篇日记的索引。"""
     await _delete_source(session, "diary", diary_id)
-
-
-async def delete_review_vectors(session: AsyncSession, review_id: int) -> None:
-    """删除一份复盘的索引。"""
-    await _delete_source(session, "review", review_id)
 
 
 async def delete_user_vectors(
@@ -428,23 +394,9 @@ async def reindex_user(
     for diary in diaries:
         await index_diary(session, diary.id)
 
-    reviews = list(
-        await session.scalars(
-            select(ConflictReview)
-            .join(ConflictSession, ConflictSession.id == ConflictReview.session_id)
-            .where(
-                ConflictSession.couple_id == couple_id,
-                ConflictReview.user_id == user_id,
-            )
-        )
-    )
-    for review in reviews:
-        await index_review(session, review.id)
-
     logger.info(
         "indexing.reindexed",
         couple_id=couple_id,
         user_id=user_id,
         diaries=len(diaries),
-        reviews=len(reviews),
     )

@@ -18,14 +18,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.modules.ai import embeddings, vectorstore
-from app.modules.conflicts.models import ConflictReview, ConflictSession
 from app.modules.diaries.models import Diary
 
 logger = structlog.get_logger("retrieval")
 
 # 回退模式的预算
 DIARY_LIMIT = 10
-REVIEW_LIMIT = 5
 EXCERPT = 200
 
 
@@ -38,11 +36,9 @@ def _excerpt(text: str) -> str:
 async def recent_context(
     session: AsyncSession, couple_id: int, target_user_id: int
 ) -> list[str]:
-    """回退模式：取对方最近的日记和复盘。
+    """回退模式：取对方最近的日记。
 
-    只读取该用户自己写的内容：
-    - 日记：作者是 TA
-    - 复盘：提交人是 TA
+    只读取该用户自己写的内容（日记作者是 TA）。
     """
     fragments: list[str] = []
 
@@ -58,22 +54,6 @@ async def recent_context(
     for diary in diaries:
         tags = f"（情绪：{'、'.join(diary.mood_tags)}）" if diary.mood_tags else ""
         fragments.append(f"[日记] {_excerpt(diary.content)}{tags}")
-
-    reviews = await session.scalars(
-        select(ConflictReview)
-        .join(ConflictSession, ConflictSession.id == ConflictReview.session_id)
-        .where(
-            ConflictSession.couple_id == couple_id,
-            ConflictReview.user_id == target_user_id,
-        )
-        .order_by(ConflictReview.id.desc())
-        .limit(REVIEW_LIMIT)
-    )
-    for review in reviews:
-        fragments.append(
-            f"[复盘] 最想被理解：{_excerpt(review.want_to_be_understood)}；"
-            f"听到的需求：{_excerpt(review.heard_partner_need)}"
-        )
 
     return fragments
 

@@ -86,7 +86,7 @@ EMBEDDING_MODEL=...
 写入是异步的：
 
 ```
-日记创建/修改/删除、复盘提交
+日记创建/修改/删除、聊天记录导入
     ↓ ARQ 入队
 worker 切片 -> embedding -> Chroma
 ```
@@ -199,8 +199,6 @@ openssl rand -base64 32    # 写入 DATA_ENCRYPTION_KEY
 
 - 秘密内容 `secrets.content`
 - 日记标题与正文 `diaries.title/content`
-- 争吵消息与复盘 `conflict_messages` / `conflict_reviews`
-- 询问中心的问题、AI 分析、输入与补充 `inquiry_sessions` / `inquiry_inputs` / `inquiry_supplements`
 - 每日一问回答 `daily_answers.answer`
 - 账本备注 `bills.remark`
 

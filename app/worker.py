@@ -118,13 +118,6 @@ async def delete_diary_vectors(ctx: dict, diary_id: int) -> None:
             await indexing.delete_diary_vectors(session, diary_id)
 
 
-async def index_review(ctx: dict, review_id: int) -> None:
-    """重建一份复盘的向量索引。"""
-    with tracer.start_as_current_span("worker.index_review"):
-        async with SessionLocal() as session:
-            await indexing.index_review(session, review_id)
-
-
 async def delete_user_vectors(ctx: dict, couple_id: int | None, user_id: int) -> None:
     """删除某个用户的向量。
 
@@ -148,7 +141,6 @@ class WorkerSettings:
         ping,
         index_diary,
         delete_diary_vectors,
-        index_review,
         delete_user_vectors,
         process_chat_import,
     ]

@@ -9,11 +9,9 @@ from app.modules.audit import models as audit_models  # noqa: F401
 from app.modules.bills import models as bills_models  # noqa: F401
 from app.modules.coin_applies import models as coin_apply_models  # noqa: F401
 from app.modules.coins import models as coins_models  # noqa: F401
-from app.modules.conflicts import models as conflicts_models  # noqa: F401
 from app.modules.couples import models as couples_models  # noqa: F401
 from app.modules.daily import models as daily_models  # noqa: F401
 from app.modules.diaries import models as diaries_models  # noqa: F401
-from app.modules.inquiries import models as inquiries_models  # noqa: F401
 from app.modules.mall import models as mall_models  # noqa: F401
 from app.modules.notifications import models as notifications_models  # noqa: F401
 from app.modules.secrets import models as secrets_models  # noqa: F401

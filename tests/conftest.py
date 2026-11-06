@@ -7,6 +7,7 @@ os.environ.setdefault("QUEUE_ENABLED", "false")
 
 import asyncpg
 import pytest_asyncio
+from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
@@ -49,7 +50,9 @@ async def engine():
     await _ensure_database()
     eng = create_async_engine(TEST_DATABASE_URL, echo=False, poolclass=NullPool)
     async with eng.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+        # 直接重建 schema：即使有已从模型里删掉的旧表，也不会被外键挡住
+        await conn.execute(text("DROP SCHEMA public CASCADE"))
+        await conn.execute(text("CREATE SCHEMA public"))
         await conn.run_sync(Base.metadata.create_all)
     yield eng
     await eng.dispose()

@@ -27,7 +27,7 @@ TOOL_SCHEMAS = [
         "function": {
             "name": "search_memories",
             "description": (
-                "检索伴侣过去写过的日记、争吵复盘和聊天片段。"
+                "检索伴侣过去写过的日记和聊天片段。"
                 "适合回答“我们上次说过什么”“TA 怎么想的”这类问题。"
             ),
             "parameters": {
