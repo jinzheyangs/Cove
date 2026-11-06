@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.errors import AppError
 from app.modules.agent import repository as repo
+from app.modules.agent import tools
 from app.modules.agent.models import AgentConversation, PersonaProfile
 from app.modules.agent.schemas import (
     ChatOut,
@@ -115,15 +116,16 @@ async def delete_conversation(
     await session.commit()
 
 
-async def chat(
+async def validate_for_chat(
     session: AsyncSession,
     couple: Couple,
     user: User,
     conversation_id: int,
-    message: str,
-    history: list[ChatTurn],
-) -> ChatOut:
-    """进行一轮对话。"""
+) -> AgentConversation:
+    """对话前的统一校验：归属 + 对方授权。
+
+    普通对话和流式对话都先走这里，避免两套判断逻辑。
+    """
     conversation = await _get_owned(session, couple, user, conversation_id)
 
     consent = await persona_repo.get_consent(
@@ -133,7 +135,18 @@ async def chat(
         raise AppError(
             "对方还没有授权把 TA 的数据用于模拟", code=14001, status_code=403
         )
+    return conversation
 
+
+async def _build_messages(
+    session: AsyncSession,
+    couple: Couple,
+    user: User,
+    conversation: AgentConversation,
+    message: str,
+    history: list[ChatTurn],
+) -> list[dict]:
+    """组装发给模型的完整 messages。"""
     target = await session.get(User, conversation.target_id)
     nickname = target.nickname if target is not None else "TA"
 
@@ -148,15 +161,78 @@ async def chat(
     context = "\n".join(fragments)
 
     system = _system_prompt(nickname, fidelity, profile, context)
-    history_messages = await _load_history(
-        session, conversation, history
-    )
+    history_messages = await _load_history(session, conversation, history)
 
-    reply = await ai_client.complete_chat(
+    return (
         [{"role": "system", "content": system}]
         + history_messages
         + [{"role": "user", "content": message}]
     )
+
+
+async def chat(
+    session: AsyncSession,
+    couple: Couple,
+    user: User,
+    conversation_id: int,
+    message: str,
+    history: list[ChatTurn],
+) -> ChatOut:
+    """进行一轮对话，允许模型调用只读工具。"""
+    conversation = await validate_for_chat(
+        session, couple, user, conversation_id
+    )
+    messages = await _build_messages(
+        session, couple, user, conversation, message, history
+    )
+
+    reply = ""
+    for _ in range(settings.AGENT_MAX_TOOL_ROUNDS):
+        result = await ai_client.complete_with_tools(messages, tools.TOOL_SCHEMAS)
+        tool_calls = getattr(result, "tool_calls", None)
+
+        if not tool_calls:
+            reply = result.content or ""
+            break
+
+        # 把模型想调用的工具原样追加回对话
+        messages.append(
+            {
+                "role": "assistant",
+                "content": result.content or "",
+                "tool_calls": [
+                    {
+                        "id": call.id,
+                        "type": "function",
+                        "function": {
+                            "name": call.function.name,
+                            "arguments": call.function.arguments,
+                        },
+                    }
+                    for call in tool_calls
+                ],
+            }
+        )
+
+        for call in tool_calls:
+            try:
+                args = json.loads(call.function.arguments or "{}")
+            except json.JSONDecodeError:
+                args = {}
+            output = await tools.execute_tool(
+                call.function.name,
+                args,
+                session=session,
+                couple=couple,
+                user=user,
+                target_id=conversation.target_id,
+            )
+            messages.append(
+                {"role": "tool", "tool_call_id": call.id, "content": output}
+            )
+    else:
+        # 超过工具调用轮数仍然没有给出文本，兜底
+        reply = "我想了一下，你再说具体一点？"
 
     if conversation.persist:
         await repo.add_message(
@@ -165,7 +241,6 @@ async def chat(
         await repo.add_message(
             session, conversation_id=conversation.id, role="assistant", content=reply
         )
-        # 有新消息就顺延过期时间
         conversation.expires_at = datetime.now(UTC) + timedelta(
             days=settings.AGENT_RETENTION_DAYS
         )
@@ -174,6 +249,49 @@ async def chat(
     return ChatOut(
         conversation_id=conversation.id, reply=reply, disclaimer=DISCLAIMER
     )
+
+
+async def stream_reply(
+    session: AsyncSession,
+    couple_id: int,
+    user_id: int,
+    conversation_id: int,
+    message: str,
+    history: list[ChatTurn],
+):
+    """流式生成回复。
+
+    流式模式不支持工具调用：工具需要多轮往返，
+    和逐字输出混在一起体验很乱。需要工具时走普通接口。
+    """
+    couple = await session.get(Couple, couple_id)
+    user = await session.get(User, user_id)
+    if couple is None or user is None:
+        raise AppError("会话不存在", code=17001, status_code=404)
+
+    conversation = await validate_for_chat(
+        session, couple, user, conversation_id
+    )
+    messages = await _build_messages(
+        session, couple, user, conversation, message, history
+    )
+
+    reply = ""
+    async for delta in ai_client.stream_chat(messages):
+        reply += delta
+        yield delta
+
+    if conversation.persist:
+        await repo.add_message(
+            session, conversation_id=conversation.id, role="user", content=message
+        )
+        await repo.add_message(
+            session, conversation_id=conversation.id, role="assistant", content=reply
+        )
+        conversation.expires_at = datetime.now(UTC) + timedelta(
+            days=settings.AGENT_RETENTION_DAYS
+        )
+        await session.commit()
 
 
 async def cleanup_expired(session: AsyncSession) -> int:
@@ -250,6 +368,10 @@ def _system_prompt(
     if context:
         parts.append(f"【TA 在类似话题下的真实记录】\n{context}")
 
+    parts.append(
+        "需要查询事实时可以调用工具（记忆、关系、金币、商城、清单、每日一问）。"
+        "只在确实需要时调用，不要为了调用而调用。"
+    )
     parts.append(
         "只使用以上记录里的信息和口吻。不确定就说不确定，不要编造。"
         "不要替 TA 做承诺。"

@@ -3783,6 +3783,62 @@
         }
       }
     },
+    "/api/v1/agent/conversations/{conversation_id}/messages/stream": {
+      "post": {
+        "tags": [
+          "agent"
+        ],
+        "summary": "Chat Stream",
+        "description": "流式对话（SSE）。\n\n先在普通请求里完成归属和授权校验，错误能以正常 HTTP 状态返回；\n校验通过后再切换成事件流。\n\n流式模式不支持工具调用，需要工具时用普通接口。",
+        "operationId": "chat_stream_api_v1_agent_conversations__conversation_id__messages_stream_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health",

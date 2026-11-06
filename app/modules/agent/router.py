@@ -4,11 +4,14 @@
 也可以创建 persist=false 的会话，服务端不存消息。
 """
 
+import json
 from typing import Annotated
 
 from fastapi import APIRouter, File, Form, UploadFile
+from fastapi.responses import StreamingResponse
 
 from app.core.config import settings
+from app.core.db import SessionLocal
 from app.core.deps import CurrentUser, SessionDep
 from app.core.errors import AppError
 from app.core.schemas import Envelope
@@ -160,3 +163,59 @@ async def chat(
         session, couple, user, conversation_id, body.message, body.history
     )
     return Envelope(data=result)
+
+
+@router.post("/conversations/{conversation_id}/messages/stream")
+async def chat_stream(
+    conversation_id: int,
+    body: ChatIn,
+    user: CurrentUser,
+    couple: CurrentCouple,
+    session: SessionDep,
+) -> StreamingResponse:
+    """流式对话（SSE）。
+
+    先在普通请求里完成归属和授权校验，错误能以正常 HTTP 状态返回；
+    校验通过后再切换成事件流。
+
+    流式模式不支持工具调用，需要工具时用普通接口。
+    """
+    await service.validate_for_chat(session, couple, user, conversation_id)
+    couple_id = couple.id
+    user_id = user.id
+
+    async def event_stream():
+        # 流式响应会超出请求依赖的生命周期，所以自己开一个会话
+        async with SessionLocal() as stream_session:
+            try:
+                async for delta in service.stream_reply(
+                    stream_session,
+                    couple_id,
+                    user_id,
+                    conversation_id,
+                    body.message,
+                    body.history,
+                ):
+                    yield f"data: {json.dumps({'delta': delta}, ensure_ascii=False)}\n\n"
+                yield (
+                    "data: "
+                    + json.dumps(
+                        {"done": True, "conversation_id": conversation_id},
+                        ensure_ascii=False,
+                    )
+                    + "\n\n"
+                )
+            except AppError as exc:
+                yield (
+                    "data: "
+                    + json.dumps(
+                        {"error": exc.message, "code": exc.code}, ensure_ascii=False
+                    )
+                    + "\n\n"
+                )
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

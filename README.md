@@ -191,9 +191,12 @@ uv run python scripts/reindex_user.py <couple_id> <user_id>
 ```
 POST /agent/conversations                 新建会话
 POST /agent/conversations/{id}/messages   发一条消息
+POST /agent/conversations/{id}/messages/stream  流式回复（SSE）
 GET  /agent/conversations/{id}            查看历史
 DELETE /agent/conversations/{id}          删除会话和消息
 ```
+
+流式模式逐字返回，适合聊天界面；它不支持工具调用，需要工具时走普通接口。
 
 每轮流程：
 
@@ -201,6 +204,20 @@ DELETE /agent/conversations/{id}          删除会话和消息
 2. 用当前问题做 RAG 检索
 3. system prompt = 风格画像 + 典型发言 + 检索结果 + 规则
 4. 调模型，回复约束成微信式短句
+
+Agent 可以调用的只读工具：
+
+| 工具 | 用途 |
+|---|---|
+| `search_memories` | 检索日记、复盘、聊天片段 |
+| `get_couple_summary` | 在一起多少天、昵称 |
+| `get_coin_balance` | 金币余额 |
+| `list_mall_items` | 已上架商品 |
+| `list_todos` | 未完成的共同清单 |
+| `get_today_question` | 今日一问 |
+
+写操作（加清单、写日记）需要用户二次确认，暂未开放。
+每轮最多 5 次工具调用，防止模型死循环。
 
 会话策略：
 
@@ -239,6 +256,18 @@ POST /api/v1/agent/imports   (multipart)
 - 原始文件只在内存里解析，不落盘
 - 导入后 worker 生成风格画像和向量索引
 - 删除导入会清理消息、向量和画像
+
+### 独立 AI 服务
+
+`app/agent_main.py` 只挂载 agent 路由，可以单独部署：
+
+```bash
+uv run uvicorn app.agent_main:app --port 8100
+```
+
+docker compose 里有 `agent` 服务（8100）。生产环境用 nginx 把
+`/api/v1/agent` 转发到它，业务接口仍留在 `api:8000`。
+两个服务共享同一个 PostgreSQL、Redis、Chroma。
 
 ## 开发进度
 

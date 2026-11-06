@@ -111,6 +111,8 @@ class Settings(BaseSettings):
     AGENT_RETENTION_DAYS: int = 30
     # 每次请求最多带多少轮历史（1 轮 = 用户 + 分身各一条）
     AGENT_MAX_HISTORY_TURNS: int = 10
+    # 一轮对话里最多允许几次工具调用
+    AGENT_MAX_TOOL_ROUNDS: int = 5
     # 聊天记录导入上限
     CHAT_IMPORT_MAX_BYTES: int = 20 * 1024 * 1024
     CHAT_IMPORT_MAX_MESSAGES: int = 100_000

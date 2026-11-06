@@ -121,6 +121,27 @@ uv run python scripts/reindex_user.py <couple_id> <user_id>
 
 大文件建议按时间拆分多次导入：单次太大容易触发请求超时。
 
+### AI 服务拆分
+
+- `api`：业务接口，端口 8000
+- `agent`：只挂载 `/api/v1/agent`，端口 8100
+- `worker`：后台任务（画像、索引、清理）
+
+生产环境建议在 nginx 里把 `/api/v1/agent` 转发到 `agent:8100`，
+其余 `/api/v1` 转发到 `api:8000`。
+
+流式接口使用 SSE，nginx 需要关闭缓冲：
+
+```nginx
+location /api/v1/agent/ {
+    proxy_pass http://agent:8100;
+    proxy_buffering off;
+    proxy_read_timeout 120s;
+}
+```
+
+两个服务共享同一套 PostgreSQL、Redis、Chroma，不需要额外同步。
+
 ### 会话历史
 
 AI 多轮对话的消息保存在 `agent_conversations` / `agent_messages`，

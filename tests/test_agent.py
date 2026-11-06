@@ -1,6 +1,7 @@
 """AI 对话：多轮记忆、授权校验、不保存模式、隔离、删除与过期清理。"""
 
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import select
@@ -28,11 +29,11 @@ async def test_chat_persists_user_and_assistant_messages(session, monkeypatch):
 
     captured: dict = {}
 
-    async def fake_chat(messages):
+    async def fake_chat(messages, tools):
         captured["messages"] = messages
-        return "在呢，怎么啦"
+        return SimpleNamespace(content="在呢，怎么啦", tool_calls=None)
 
-    monkeypatch.setattr(ai_client, "complete_chat", fake_chat)
+    monkeypatch.setattr(ai_client, "complete_with_tools", fake_chat)
 
     result = await service.chat(session, couple, a, conversation.id, "今天好累", [])
 
@@ -74,11 +75,11 @@ async def test_history_is_included_in_next_turn(session, monkeypatch):
 
     captured: dict = {}
 
-    async def fake_chat(messages):
+    async def fake_chat(messages, tools):
         captured["messages"] = messages
-        return "回复一"
+        return SimpleNamespace(content="回复一", tool_calls=None)
 
-    monkeypatch.setattr(ai_client, "complete_chat", fake_chat)
+    monkeypatch.setattr(ai_client, "complete_with_tools", fake_chat)
 
     await service.chat(session, couple, a, conversation.id, "第一句", [])
     await service.chat(session, couple, a, conversation.id, "第二句", [])
@@ -100,11 +101,11 @@ async def test_persist_false_uses_request_history_and_stores_nothing(
 
     captured: dict = {}
 
-    async def fake_chat(messages):
+    async def fake_chat(messages, tools):
         captured["messages"] = messages
-        return "记得"
+        return SimpleNamespace(content="记得", tool_calls=None)
 
-    monkeypatch.setattr(ai_client, "complete_chat", fake_chat)
+    monkeypatch.setattr(ai_client, "complete_with_tools", fake_chat)
 
     history = [
         ChatTurn(role="user", content="之前说的"),
@@ -145,10 +146,10 @@ async def test_delete_conversation_removes_messages(session, monkeypatch):
         session, couple, a, None, persist=True
     )
 
-    async def fake_chat(messages):
-        return "好"
+    async def fake_chat(messages, tools):
+        return SimpleNamespace(content="好", tool_calls=None)
 
-    monkeypatch.setattr(ai_client, "complete_chat", fake_chat)
+    monkeypatch.setattr(ai_client, "complete_with_tools", fake_chat)
     await service.chat(session, couple, a, conversation.id, "在吗", [])
 
     conversation_id = conversation.id
