@@ -3,9 +3,11 @@
 启动方式：
     arq app.worker.WorkerSettings
 
-当前只有两个定时任务：
+定时任务：
 - 每天 03:17 金币对账
 - 每天 03:41 清理燃尽期已过的秘密内容
+- 每天 04:07 清理过期 Agent 会话
+- 每天 04:17 过期未确认的 Agent 动作
 """
 
 import structlog
@@ -129,6 +131,16 @@ async def delete_user_vectors(ctx: dict, couple_id: int | None, user_id: int) ->
             await indexing.delete_user_vectors(session, couple_id, user_id)
 
 
+async def delete_chat_import_vectors(ctx: dict, import_id: int) -> None:
+    """删除一次聊天导入的全部向量。
+
+    注销账号时，本人上传的导入已被删除，这里清理它在 Chroma 里的残留。
+    """
+    with tracer.start_as_current_span("worker.delete_chat_import_vectors"):
+        async with SessionLocal() as session:
+            await indexing.delete_chat_import(session, import_id)
+
+
 class WorkerSettings:
     """ARQ 的启动配置。
 
@@ -142,6 +154,7 @@ class WorkerSettings:
         index_diary,
         delete_diary_vectors,
         delete_user_vectors,
+        delete_chat_import_vectors,
         process_chat_import,
     ]
     # 错开整点执行，避免和其他系统的定时任务撞车

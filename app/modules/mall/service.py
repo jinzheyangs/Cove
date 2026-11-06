@@ -199,13 +199,15 @@ async def buy(
         )
         await session.commit()
     except IntegrityError:
-        # 并发提交同一个幂等键：回滚会同时撤销本次扣币，返回先成功的订单
+        # 并发提交同一个幂等键：回滚会同时撤销本次扣币，返回先成功的订单。
+        # key 为空时不能去查 NULL，否则可能返回一笔无关的旧订单。
         await session.rollback()
-        existing = await repo.get_order_by_idempotency_key(
-            session, couple.id, idempotency_key
-        )
-        if existing is not None:
-            return existing
+        if idempotency_key:
+            existing = await repo.get_order_by_idempotency_key(
+                session, couple.id, idempotency_key
+            )
+            if existing is not None:
+                return existing
         raise
     except AppError:
         # 余额不足等业务错误：回滚扣币，商品保持原状

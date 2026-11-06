@@ -55,9 +55,10 @@ async def create(
         await session.commit()
     except IntegrityError:
         await session.rollback()
-        existing = await repo.get_by_idempotency_key(session, couple.id, key)
-        if existing is not None:
-            return existing
+        if key:
+            existing = await repo.get_by_idempotency_key(session, couple.id, key)
+            if existing is not None:
+                return existing
         raise
 
     await session.refresh(bill)

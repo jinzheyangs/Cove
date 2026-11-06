@@ -13,6 +13,7 @@ from app.modules.ai import client as ai_client
 from app.modules.coins import repository as coin_repo
 from app.modules.diaries.models import Diary
 from app.modules.mall import service as mall_service
+from app.modules.mall.models import MallOrder
 from app.modules.mall.schemas import ItemCreate
 from app.modules.simta import service as simta_service
 from app.modules.todos.models import TodoItem
@@ -205,6 +206,35 @@ async def test_confirm_buys_mall_item_and_deducts_coins(session):
 
     assert result["price"] == 10
     assert await coin_repo.get_balance(session, a.id) == 90
+
+
+async def test_confirm_retry_does_not_double_charge(session):
+    """模拟「扣币成功但动作状态没提交」：重试不能重复扣币。"""
+    a, b, couple = await seed_couple(session)
+    await fund_user(session, couple, a, 100)
+    conversation = await _conversation(session, couple, a)
+
+    item = await mall_service.create_item(
+        session, couple, b, ItemCreate(title="早餐", price_coins=10)
+    )
+    await mall_service.approve_item(session, couple, a, item.id)
+
+    action = await actions.create_pending(
+        session, conversation, a, "buy_mall_item", {"item_id": item.id}
+    )
+    _, first = await actions.confirm(session, couple, a, action.id)
+
+    # 模拟业务写入成功、但动作状态提交失败
+    action.status = "pending"
+    action.result = None
+    action.decided_at = None
+    await session.commit()
+
+    _, second = await actions.confirm(session, couple, a, action.id)
+
+    assert second["order_id"] == first["order_id"]
+    assert await coin_repo.get_balance(session, a.id) == 90
+    assert await session.scalar(select(func.count()).select_from(MallOrder)) == 1
 
 
 async def test_buy_without_balance_keeps_action_pending(session):

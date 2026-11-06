@@ -49,11 +49,13 @@ async def create(
         )
         await session.commit()
     except IntegrityError:
-        # 并发提交同一个 key：唯一索引兜底，返回先成功的那条
+        # 并发提交同一个 key：唯一索引兜底，返回先成功的那条。
+        # key 为空时不能去查 NULL，否则可能返回一条无关的旧记录。
         await session.rollback()
-        existing = await repo.get_by_idempotency_key(session, couple.id, key)
-        if existing is not None:
-            return existing
+        if key:
+            existing = await repo.get_by_idempotency_key(session, couple.id, key)
+            if existing is not None:
+                return existing
         raise
 
     await session.refresh(diary)

@@ -1,8 +1,10 @@
 """模拟TA：授权前置、忠实度提示词、撤销即停用。"""
 
 import pytest
+from sqlalchemy import select
 
 from app.core.errors import AppError
+from app.modules.agent.models import PersonaProfile
 from app.modules.ai import client as ai_client
 from app.modules.diaries import service as diary_service
 from app.modules.diaries.schemas import DiaryCreate
@@ -69,3 +71,27 @@ async def test_revoking_consent_blocks_chat(session):
         await service.chat(session, couple, a, "在吗")
 
     assert exc.value.code == 14001
+
+
+async def test_revoking_consent_deletes_persona_profile(session):
+    a, b, couple = await seed_couple(session)
+    session.add(
+        PersonaProfile(
+            couple_id=couple.id,
+            user_id=b.id,
+            style_summary="说话很温柔",
+            samples_json="[]",
+            stats={},
+        )
+    )
+    await session.commit()
+
+    await service.set_consent(session, couple, b, False)
+
+    profile = await session.scalar(
+        select(PersonaProfile).where(
+            PersonaProfile.couple_id == couple.id,
+            PersonaProfile.user_id == b.id,
+        )
+    )
+    assert profile is None

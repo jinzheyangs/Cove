@@ -39,10 +39,15 @@ async def delete_account(session: AsyncSession, user: User, password: str) -> No
         couple.status = "unbound"
         couple.unbound_at = datetime.now(UTC)
 
-    # 2. 删除个人内容（金币流水和商城记录保留，否则对方账目会对不上）
+    # 2. 记下聊天导入：本人上传的要删，对方上传但含本人发言的要重建索引
+    uploaded_imports, affected_imports = await repo.collect_chat_imports(
+        session, couple_id, user.id
+    )
+
+    # 3. 删除个人内容（金币流水和商城记录保留，否则对方账目会对不上）
     await repo.purge_personal_content(session, user.id)
 
-    # 3. 匿名化用户行，保留外键完整性。
+    # 4. 匿名化用户行，保留外键完整性。
     #    手机号改成 deleted-{id}，把原手机号释放出来，用户可以重新注册
     user.phone = f"deleted-{user.id}"
     user.password_hash = hash_password(uuid4().hex)
@@ -63,6 +68,12 @@ async def delete_account(session: AsyncSession, user: User, password: str) -> No
     # 删除该用户在向量库里的全部索引。
     # couple_id 可能为空（注销时已解绑），此时按 user_id 全局删除。
     await enqueue("delete_user_vectors", couple_id, user.id)
+    # 本人上传的导入已被整条删除，清掉它对应的全部向量
+    for import_id in uploaded_imports:
+        await enqueue("delete_chat_import_vectors", import_id)
+    # 对方上传的导入里删掉了本人发言，重建它的索引和画像
+    for import_id in affected_imports:
+        await enqueue("process_chat_import", import_id)
 
 
 # 导出时每类数据保留的字段。显式列出来，避免把内部字段（如 user_id）带出去

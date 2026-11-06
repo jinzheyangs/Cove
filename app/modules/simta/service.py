@@ -6,10 +6,12 @@
 3. 理想化模式不允许替对方做承诺
 """
 
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
 from app.core.queue import enqueue
+from app.modules.agent.models import PersonaProfile
 from app.modules.ai import client as ai_client
 from app.modules.ai import retrieval
 from app.modules.audit import service as audit_service
@@ -53,6 +55,14 @@ async def set_consent(
     """
     await repo.upsert_consent(session, couple.id, user.id, authorized)
     if not authorized:
+        # 撤销即停用：派生的风格画像也一并删除，不能只删向量。
+        # 原始聊天记录保留（双方共同导入，删掉会连带对方的数据）。
+        await session.execute(
+            delete(PersonaProfile).where(
+                PersonaProfile.couple_id == couple.id,
+                PersonaProfile.user_id == user.id,
+            )
+        )
         await audit_service.record(
             session,
             user_id=user.id,

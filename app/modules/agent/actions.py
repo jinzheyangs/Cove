@@ -154,6 +154,10 @@ async def _execute(
 
     新增类型时在这里加分支，并确保参数经过校验。
     """
+    # 每个动作的写入都带同一个幂等键：
+    # 万一「业务写入成功、动作状态提交失败」，用户重试也不会重复写/重复扣币。
+    idempotency_key = f"agent-action-{action.id}"
+
     if action.type == "create_todo":
         todo = await todo_service.create(
             session,
@@ -163,6 +167,7 @@ async def _execute(
                 title=payload["title"],
                 category=payload.get("category") or "想实现的约定",
                 description=payload.get("description"),
+                idempotency_key=idempotency_key,
             ),
         )
         return {"todo_id": todo.id}
@@ -178,13 +183,18 @@ async def _execute(
                 content=payload["content"],
                 mood_tags=payload.get("mood_tags") or [],
                 location=payload.get("location"),
+                idempotency_key=idempotency_key,
             ),
         )
         return {"diary_id": diary.id}
 
     if action.type == "buy_mall_item":
         order = await mall_service.buy(
-            session, couple, user, int(payload["item_id"])
+            session,
+            couple,
+            user,
+            int(payload["item_id"]),
+            idempotency_key=idempotency_key,
         )
         return {"order_id": order.id, "price": order.price}
 
