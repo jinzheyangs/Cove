@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from app.core.errors import AppError
 from app.modules.agent import import_service, importers, persona
 from app.modules.agent.models import ChatMessage
+from app.modules.ai import embeddings, indexing, vectorstore
 from app.modules.simta import service as simta_service
 from tests.helpers import seed_couple
 
@@ -92,6 +93,89 @@ async def test_import_maps_senders_and_dedupes(session):
 
     count = await session.scalar(select(func.count()).select_from(ChatMessage))
     assert count == 3
+
+
+async def test_import_rejects_one_sided_mapping(session):
+    a, b, couple = await seed_couple(session)
+    await simta_service.set_consent(session, couple, a, True)
+    await simta_service.set_consent(session, couple, b, True)
+
+    one_sided = "\n".join(
+        [
+            '{"sender":"A","sent_at":"2024-05-01T20:00:00+08:00","content":"只有我"}',
+            '{"sender":"A","sent_at":"2024-05-01T20:01:00+08:00","content":"还是我"}',
+        ]
+    )
+
+    with pytest.raises(AppError) as exc:
+        await import_service.import_chat_log(
+            session,
+            couple,
+            a,
+            filename="chat.jsonl",
+            fmt="jsonl",
+            raw=one_sided.encode(),
+            owner_name="A",
+            partner_name="B",
+        )
+
+    assert exc.value.code == 17008
+
+
+async def test_chat_windows_label_real_names_per_persona(session, monkeypatch):
+    a, b, couple = await seed_couple(session)
+    await simta_service.set_consent(session, couple, a, True)
+    await simta_service.set_consent(session, couple, b, True)
+    import_row = await import_service.import_chat_log(
+        session,
+        couple,
+        a,
+        filename="chat.jsonl",
+        fmt="jsonl",
+        raw=JSONL.encode(),
+        owner_name="A",
+        partner_name="B",
+    )
+
+    captured: dict = {"documents": [], "metadatas": []}
+
+    async def fake_embed(texts):
+        return [[0.1] for _ in texts]
+
+    async def fake_upsert(ids, vectors, documents, metadatas):
+        captured["documents"].extend(documents)
+        captured["metadatas"].extend(metadatas)
+
+    async def fake_delete(ids):
+        return None
+
+    monkeypatch.setattr(embeddings, "is_configured", lambda: True)
+    monkeypatch.setattr(embeddings, "embed_texts", fake_embed)
+    monkeypatch.setattr(vectorstore, "upsert", fake_upsert)
+    monkeypatch.setattr(vectorstore, "delete_ids", fake_delete)
+
+    await indexing.index_chat_import(session, import_row.id)
+
+    b_docs = [
+        doc
+        for doc, meta in zip(
+            captured["documents"], captured["metadatas"], strict=True
+        )
+        if meta["user_id"] == b.id
+    ]
+    a_docs = [
+        doc
+        for doc, meta in zip(
+            captured["documents"], captured["metadatas"], strict=True
+        )
+        if meta["user_id"] == a.id
+    ]
+
+    # B 的画像窗口里，B 的话标 B，A 的话标 A
+    assert any("B：怎么啦" in doc for doc in b_docs)
+    assert any("A：今天好累" in doc for doc in b_docs)
+    # A 的画像窗口同理，不会把 B 的话标成 A
+    assert any("A：老板又改需求" in doc for doc in a_docs)
 
 
 async def test_persona_profile_uses_own_messages(session):

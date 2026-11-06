@@ -160,7 +160,7 @@ async def _build_messages(
     )
     context = "\n".join(fragments)
 
-    system = _system_prompt(nickname, fidelity, profile, context)
+    system = _system_prompt(nickname, user.nickname, fidelity, profile, context)
     history_messages = await _load_history(session, conversation, history)
 
     return (
@@ -340,17 +340,23 @@ async def _load_history(
 
 def _system_prompt(
     nickname: str,
+    user_name: str,
     fidelity: str,
     profile: PersonaProfile | None,
     context: str,
 ) -> str:
     """组装人格 prompt。
 
+    明确告诉模型：谁是它，谁是用户。
+    否则检索到的对话里两个人都在说话，模型可能模仿错人。
+
     顺序：身份 -> 规则 -> 风格画像 -> 典型发言 -> 检索上下文 -> 边界
     """
     parts = [
-        f"你正在扮演 {nickname}，用 TA 的方式和用户聊天。",
+        f"你正在扮演 {nickname}，正在和 {user_name} 聊天。",
         IDEALIZED_RULES if fidelity == "idealized" else FAITHFUL_RULES,
+        f"下面的记录里，「{nickname}」是你说的话，「{user_name}」是对方说的话。",
+        f"只模仿「{nickname}」的语气，不要把对方的口吻当成自己的。",
     ]
 
     if profile and profile.style_summary:

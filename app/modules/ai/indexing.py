@@ -23,6 +23,7 @@ from app.modules.ai.models import ChunkIndex
 from app.modules.conflicts.models import ConflictReview, ConflictSession
 from app.modules.couples.models import Couple
 from app.modules.diaries.models import Diary
+from app.modules.users.models import User
 
 logger = structlog.get_logger("indexing")
 
@@ -271,10 +272,20 @@ def _cap_windows(
     return [windows[int(i * step)] for i in range(limit)]
 
 
-def _format_chat_window(window: list[ChatMessage], target_id: int) -> str:
+def _format_chat_window(
+    window: list[ChatMessage],
+    target_id: int,
+    target_name: str,
+    other_name: str,
+) -> str:
+    """标注每一句是谁说的。
+
+    必须用真实昵称而不是「TA / 对方」：
+    模型看到「对方」时不知道指的是谁，容易把用户自己的口吻当成模拟对象。
+    """
     lines = []
     for message in window:
-        who = "TA" if message.sender_id == target_id else "对方"
+        who = target_name if message.sender_id == target_id else other_name
         lines.append(f"{who}：{message.content}")
     return "\n".join(lines)
 
@@ -296,6 +307,14 @@ async def index_chat_import(session: AsyncSession, import_id: int) -> int:
     if couple is None:
         return 0
 
+    # 取双方昵称，用于给窗口里的每一句标注说话人
+    users = {
+        user.id: user
+        for user in await session.scalars(
+            select(User).where(User.id.in_([couple.user1_id, couple.user2_id]))
+        )
+    }
+
     messages = list(
         await session.scalars(
             select(ChatMessage)
@@ -312,10 +331,19 @@ async def index_chat_import(session: AsyncSession, import_id: int) -> int:
 
     window_no = 0
     for target_id in (couple.user1_id, couple.user2_id):
+        other_id = (
+            couple.user2_id if target_id == couple.user1_id else couple.user1_id
+        )
+        target_name = users[target_id].nickname if target_id in users else "TA"
+        other_name = users[other_id].nickname if other_id in users else "对方"
+
         windows = _cap_windows(
             _build_chat_windows(messages, target_id), settings.RAG_CHAT_MAX_WINDOWS
         )
-        texts = [_format_chat_window(window, target_id) for window in windows]
+        texts = [
+            _format_chat_window(window, target_id, target_name, other_name)
+            for window in windows
+        ]
 
         # 分批 embedding，避免单次请求过大
         for start in range(0, len(texts), 100):

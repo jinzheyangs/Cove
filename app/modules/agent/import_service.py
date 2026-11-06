@@ -128,6 +128,19 @@ async def import_chat_log(
             }
         )
 
+    # 防止名字映射错误导致所有人的消息都被算到同一个人头上。
+    # 双方都该有消息；只有一方说明 owner_name / partner_name 填错了。
+    if not values:
+        raise AppError("没有可导入的消息", code=17009, status_code=400)
+
+    owner_count = sum(1 for value in values if value["sender_id"] == uploader.id)
+    if owner_count == 0 or owner_count == len(values):
+        raise AppError(
+            "只识别到一方的消息，请检查 owner_name / partner_name 是否和文件里的名字一致",
+            code=17008,
+            status_code=400,
+        )
+
     imported = 0
     for start in range(0, len(values), _BATCH_SIZE):
         batch = values[start : start + _BATCH_SIZE]
