@@ -10,9 +10,13 @@ from app.core.errors import AppError
 from app.modules.agent import actions, service, tools
 from app.modules.agent.models import AgentAction
 from app.modules.ai import client as ai_client
+from app.modules.coins import repository as coin_repo
+from app.modules.diaries.models import Diary
+from app.modules.mall import service as mall_service
+from app.modules.mall.schemas import ItemCreate
 from app.modules.simta import service as simta_service
 from app.modules.todos.models import TodoItem
-from tests.helpers import seed_couple
+from tests.helpers import fund_user, seed_couple
 
 
 async def _conversation(session, couple, user):
@@ -156,6 +160,87 @@ async def test_stream_emits_confirm_event_and_does_not_write_yet(
     await actions.confirm(session, couple, a, confirm_events[0]["action_id"])
     count = await session.scalar(select(func.count()).select_from(TodoItem))
     assert count == 1
+
+
+async def test_confirm_creates_diary(session):
+    a, _, couple = await seed_couple(session)
+    conversation = await _conversation(session, couple, a)
+    action = await actions.create_pending(
+        session,
+        conversation,
+        a,
+        "create_diary",
+        {
+            "content": "今天很开心",
+            "title": "周末",
+            "mood_tags": ["开心"],
+            "location": "家",
+        },
+    )
+
+    _, result = await actions.confirm(session, couple, a, action.id)
+
+    diary = await session.get(Diary, result["diary_id"])
+    assert diary is not None
+    assert diary.mode == "personal"
+    assert diary.content == "今天很开心"
+    assert diary.author_id == a.id
+    assert diary.mood_tags == ["开心"]
+
+
+async def test_confirm_buys_mall_item_and_deducts_coins(session):
+    a, b, couple = await seed_couple(session)
+    await fund_user(session, couple, a, 100)
+    conversation = await _conversation(session, couple, a)
+
+    item = await mall_service.create_item(
+        session, couple, b, ItemCreate(title="早餐", price_coins=10)
+    )
+    await mall_service.approve_item(session, couple, a, item.id)
+
+    action = await actions.create_pending(
+        session, conversation, a, "buy_mall_item", {"item_id": item.id}
+    )
+    _, result = await actions.confirm(session, couple, a, action.id)
+
+    assert result["price"] == 10
+    assert await coin_repo.get_balance(session, a.id) == 90
+
+
+async def test_buy_without_balance_keeps_action_pending(session):
+    a, b, couple = await seed_couple(session)
+    await fund_user(session, couple, a, 5)
+    conversation = await _conversation(session, couple, a)
+
+    item = await mall_service.create_item(
+        session, couple, b, ItemCreate(title="早餐", price_coins=10)
+    )
+    await mall_service.approve_item(session, couple, a, item.id)
+
+    action = await actions.create_pending(
+        session, conversation, a, "buy_mall_item", {"item_id": item.id}
+    )
+
+    with pytest.raises(AppError) as exc:
+        await actions.confirm(session, couple, a, action.id)
+
+    assert exc.value.code == 4001
+    await session.refresh(action)
+    assert action.status == "pending"
+
+
+async def test_expire_pending_marks_old_actions(session):
+    a, _, couple = await seed_couple(session)
+    conversation = await _conversation(session, couple, a)
+    action = await _pending_todo(session, couple, a, conversation)
+    action.expires_at = datetime.now(UTC) - timedelta(minutes=1)
+    await session.commit()
+
+    count = await actions.expire_pending(session)
+
+    assert count == 1
+    await session.refresh(action)
+    assert action.status == "expired"
 
 
 async def test_delete_conversation_removes_actions(session):

@@ -18,6 +18,7 @@ from app.core.db import SessionLocal
 from app.core.logging import configure_logging
 from app.core.metrics import COIN_RECONCILE_MISMATCHES
 from app.core.tracing import setup_tracing
+from app.modules.agent import actions as agent_actions
 from app.modules.agent import import_service as agent_import_service
 from app.modules.agent import service as agent_service
 from app.modules.ai import indexing
@@ -83,6 +84,16 @@ async def process_chat_import(ctx: dict, import_id: int) -> None:
             await agent_import_service.process_chat_import(session, import_id)
 
 
+async def expire_agent_actions(ctx: dict) -> int:
+    """把超时未确认的动作标记为 expired。"""
+    with tracer.start_as_current_span("worker.expire_agent_actions"):
+        async with SessionLocal() as session:
+            count = await agent_actions.expire_pending(session)
+
+        logger.info("过期 Agent 动作 %d 个", count)
+        return count
+
+
 async def cleanup_agent_conversations(ctx: dict) -> int:
     """删除过期会话和消息，返回清理数量。"""
     with tracer.start_as_current_span("worker.cleanup_agent_conversations"):
@@ -146,5 +157,6 @@ class WorkerSettings:
         cron(reconcile_coins, hour=3, minute=17),
         cron(purge_burned_secrets, hour=3, minute=41),
         cron(cleanup_agent_conversations, hour=4, minute=7),
+        cron(expire_agent_actions, hour=4, minute=17),
     ]
     redis_settings = RedisSettings.from_dsn(settings.REDIS_URL)

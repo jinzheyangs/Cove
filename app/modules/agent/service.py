@@ -291,6 +291,7 @@ async def stream_reply(
                         "type": parsed.get("type"),
                         "title": parsed.get("title"),
                         "category": parsed.get("category"),
+                        "summary": parsed.get("summary"),
                         "expires_in": actions.EXPIRES_IN_SECONDS,
                     },
                 )

@@ -246,6 +246,8 @@ Agent 可以调用的只读工具：
 | `list_todos` | 未完成的共同清单 |
 | `get_today_question` | 今日一问 |
 | `propose_create_todo` | 提议添加共同清单（需用户确认） |
+| `propose_create_diary` | 提议写一篇个人日记（需用户确认） |
+| `propose_buy_mall_item` | 提议兑换商品（扣金币，需用户确认） |
 
 每轮最多 5 次工具调用，防止模型死循环。
 

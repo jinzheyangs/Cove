@@ -104,6 +104,48 @@ TOOL_SCHEMAS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "propose_create_diary",
+            "description": (
+                "当用户明确要求记一篇日记时，提议创建一篇待确认的日记。"
+                "不要直接创建——用户确认后才会真的写入。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "content": {"type": "string", "description": "日记正文"},
+                    "title": {"type": "string", "description": "标题，可选"},
+                    "mood_tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "情绪标签，可选",
+                    },
+                    "location": {"type": "string", "description": "地点，可选"},
+                },
+                "required": ["content"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "propose_buy_mall_item",
+            "description": (
+                "当用户明确要求兑换商城里的某个商品时，提议创建一笔待确认订单。"
+                "会消耗金币，必须由用户确认后才执行。"
+                "item_id 可以先用 list_mall_items 查到。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "item_id": {"type": "integer", "description": "商品 id"}
+                },
+                "required": ["item_id"],
+            },
+        },
+    },
 ]
 
 
@@ -198,6 +240,84 @@ async def _propose_create_todo(
         "action_id": action.id,
         "title": title,
         "category": category,
+        "summary": f"添加清单：{title}（{category}）",
+    }
+
+
+async def _propose_create_diary(
+    session, couple, user, conversation, args
+) -> dict:
+    """创建一个待确认的日记动作，不直接写日记。"""
+    if conversation is None:
+        return {"error": "缺少会话上下文"}
+
+    content = str(args.get("content", "")).strip()
+    if not content:
+        return {"error": "content 不能为空"}
+    if len(content) > 20000:
+        return {"error": "日记太长了"}
+
+    title = args.get("title")
+    mood_tags = args.get("mood_tags") or []
+    if not isinstance(mood_tags, list):
+        mood_tags = []
+    location = args.get("location")
+
+    action = await actions.create_pending(
+        session,
+        conversation,
+        user,
+        "create_diary",
+        {
+            "content": content,
+            "title": title,
+            "mood_tags": [str(tag) for tag in mood_tags][:10],
+            "location": location,
+        },
+    )
+    label = title or content[:20]
+    return {
+        "status": "pending_confirmation",
+        "type": "create_diary",
+        "action_id": action.id,
+        "title": label,
+        "category": "日记",
+        "summary": f"写一篇日记：{label}",
+    }
+
+
+async def _propose_buy_mall_item(
+    session, couple, user, conversation, args
+) -> dict:
+    """创建一个待确认的兑换动作，不直接扣币下单。"""
+    if conversation is None:
+        return {"error": "缺少会话上下文"}
+
+    try:
+        item_id = int(args.get("item_id"))
+    except (TypeError, ValueError):
+        return {"error": "item_id 不合法"}
+
+    item = await mall_repo.get_item(session, item_id)
+    if item is None or item.couple_id != couple.id or item.status != "approved":
+        return {"error": "商品不存在或未上架"}
+
+    price = item.approved_price or item.price_coins
+    action = await actions.create_pending(
+        session,
+        conversation,
+        user,
+        "buy_mall_item",
+        {"item_id": item.id},
+    )
+    return {
+        "status": "pending_confirmation",
+        "type": "buy_mall_item",
+        "action_id": action.id,
+        "title": item.title,
+        "category": "商城",
+        "price": price,
+        "summary": f"兑换「{item.title}」，{price} 金币",
     }
 
 
@@ -210,6 +330,8 @@ TOOL_LABELS = {
     "list_todos": "正在查清单",
     "get_today_question": "正在查今日一问",
     "propose_create_todo": "准备添加清单",
+    "propose_create_diary": "准备写日记",
+    "propose_buy_mall_item": "准备下单",
 }
 
 
@@ -241,6 +363,14 @@ async def execute_tool(
     try:
         if name == "propose_create_todo":
             result = await _propose_create_todo(
+                session, couple, user, conversation, args
+            )
+        elif name == "propose_create_diary":
+            result = await _propose_create_diary(
+                session, couple, user, conversation, args
+            )
+        elif name == "propose_buy_mall_item":
+            result = await _propose_buy_mall_item(
                 session, couple, user, conversation, args
             )
         else:

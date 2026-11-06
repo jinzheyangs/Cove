@@ -5,18 +5,23 @@
 
 当前支持：
 - create_todo：添加到共同清单
+- create_diary：写一篇个人日记
+- buy_mall_item：兑换商城商品（会扣金币）
 """
 
 import json
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import delete
+from sqlalchemy import delete, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
 from app.modules.agent.models import AgentAction, AgentConversation
 from app.modules.audit import service as audit_service
 from app.modules.couples.models import Couple
+from app.modules.diaries import service as diary_service
+from app.modules.diaries.schemas import DiaryCreate
+from app.modules.mall import service as mall_service
 from app.modules.todos import service as todo_service
 from app.modules.todos.schemas import TodoCreate
 from app.modules.users.models import User
@@ -162,4 +167,44 @@ async def _execute(
         )
         return {"todo_id": todo.id}
 
+    if action.type == "create_diary":
+        diary = await diary_service.create(
+            session,
+            couple,
+            user,
+            DiaryCreate(
+                mode="personal",
+                title=payload.get("title"),
+                content=payload["content"],
+                mood_tags=payload.get("mood_tags") or [],
+                location=payload.get("location"),
+            ),
+        )
+        return {"diary_id": diary.id}
+
+    if action.type == "buy_mall_item":
+        order = await mall_service.buy(
+            session, couple, user, int(payload["item_id"])
+        )
+        return {"order_id": order.id, "price": order.price}
+
     raise AppError("不支持的操作类型", code=17013, status_code=400)
+
+
+async def expire_pending(session: AsyncSession) -> int:
+    """把超时未确认的动作标记为 expired。
+
+    确认接口本身也会检查过期，这里只是把状态刷干净，
+    避免长期停留在 pending。
+    """
+    now = datetime.now(UTC)
+    result = await session.execute(
+        update(AgentAction)
+        .where(
+            AgentAction.status == "pending",
+            AgentAction.expires_at < now,
+        )
+        .values(status="expired", decided_at=now)
+    )
+    await session.commit()
+    return result.rowcount or 0
