@@ -17,6 +17,18 @@ async def create(session: AsyncSession, *, couple_id: int, payer_id: int, **valu
     return bill
 
 
+async def get_by_idempotency_key(
+    session: AsyncSession, couple_id: int, key: str
+) -> Bill | None:
+    """按幂等键查已创建的账目。"""
+    return await session.scalar(
+        select(Bill).where(
+            Bill.couple_id == couple_id,
+            Bill.idempotency_key == key,
+        )
+    )
+
+
 async def get(session: AsyncSession, bill_id: int) -> Bill | None:
     """按主键读取。隐私和越权判断在 service 层。"""
     return await session.get(Bill, bill_id)

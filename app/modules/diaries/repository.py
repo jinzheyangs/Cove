@@ -17,6 +17,18 @@ async def create(session: AsyncSession, *, couple_id: int, author_id: int, **val
     return diary
 
 
+async def get_by_idempotency_key(
+    session: AsyncSession, couple_id: int, key: str
+) -> Diary | None:
+    """按幂等键查已创建的日记。"""
+    return await session.scalar(
+        select(Diary).where(
+            Diary.couple_id == couple_id,
+            Diary.idempotency_key == key,
+        )
+    )
+
+
 async def get(session: AsyncSession, diary_id: int) -> Diary | None:
     """按主键读取。越权判断在 service 层做。"""
     return await session.get(Diary, diary_id)

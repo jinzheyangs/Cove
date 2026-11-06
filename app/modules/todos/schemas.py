@@ -13,6 +13,8 @@ class TodoCreate(BaseModel):
     category: str = Field(min_length=1, max_length=50)
     title: str = Field(min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=1000)
+    # 客户端生成的稳定值，重复提交只创建一条
+    idempotency_key: str | None = Field(default=None, max_length=64)
 
 
 class TodoUpdate(BaseModel):

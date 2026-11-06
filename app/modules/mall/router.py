@@ -93,7 +93,9 @@ async def buy(
     body: OrderCreate, user: CurrentUser, couple: CurrentCouple, session: SessionDep
 ) -> Envelope[OrderOut]:
     """购买商品：扣币并生成待兑现订单。"""
-    order = await service.buy(session, couple, user, body.item_id)
+    order = await service.buy(
+        session, couple, user, body.item_id, body.idempotency_key
+    )
     return Envelope(data=OrderOut.model_validate(order))
 
 

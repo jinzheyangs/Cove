@@ -7,6 +7,7 @@
 
 from datetime import UTC, datetime
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
@@ -128,7 +129,11 @@ async def offline_item(
 
 
 async def buy(
-    session: AsyncSession, couple: Couple, buyer: User, item_id: int
+    session: AsyncSession,
+    couple: Couple,
+    buyer: User,
+    item_id: int,
+    idempotency_key: str | None = None,
 ) -> MallOrder:
     """用金币兑换商品。
 
@@ -141,6 +146,13 @@ async def buy(
 
     任何一步失败都整体回滚，不会出现“扣了钱没订单”。
     """
+    if idempotency_key:
+        existing = await repo.get_order_by_idempotency_key(
+            session, couple.id, idempotency_key
+        )
+        if existing is not None:
+            return existing
+
     item = await repo.get_item_for_update(session, item_id)
     if item is None or item.couple_id != couple.id:
         raise AppError("商品不存在", code=7001, status_code=404)
@@ -174,6 +186,7 @@ async def buy(
             couple_id=couple.id,
             buyer_id=buyer_id,
             price=price,
+            idempotency_key=idempotency_key,
         )
         await notification_service.notify(
             session,
@@ -185,6 +198,15 @@ async def buy(
             related_id=order.id,
         )
         await session.commit()
+    except IntegrityError:
+        # 并发提交同一个幂等键：回滚会同时撤销本次扣币，返回先成功的订单
+        await session.rollback()
+        existing = await repo.get_order_by_idempotency_key(
+            session, couple.id, idempotency_key
+        )
+        if existing is not None:
+            return existing
+        raise
     except AppError:
         # 余额不足等业务错误：回滚扣币，商品保持原状
         await session.rollback()

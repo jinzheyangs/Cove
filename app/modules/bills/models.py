@@ -21,6 +21,7 @@ from sqlalchemy import (
     Numeric,
     String,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -53,6 +54,8 @@ class Bill(Base):
     is_private: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     # 备注可能包含敏感信息，加密存储
     remark: Mapped[str | None] = mapped_column(EncryptedText)
+    # 客户端幂等键：同一个 key 重复提交只创建一条
+    idempotency_key: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -65,4 +68,11 @@ class Bill(Base):
         # 金额可以没有，但不能是负数
         CheckConstraint("amount IS NULL OR amount >= 0", name="ck_bills_amount"),
         Index("ix_bills_couple_created", "couple_id", "created_at"),
+        Index(
+            "uq_bills_idempotency",
+            "couple_id",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+        ),
     )

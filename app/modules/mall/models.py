@@ -19,6 +19,7 @@ from sqlalchemy import (
     String,
     Text,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -95,6 +96,8 @@ class MallOrder(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    # 客户端幂等键：同一个 key 重复提交只创建一笔订单、只扣一次币
+    idempotency_key: Mapped[str | None] = mapped_column(String(64))
 
     __table_args__ = (
         CheckConstraint(
@@ -102,4 +105,11 @@ class MallOrder(Base):
         ),
         Index("ix_mall_orders_couple", "couple_id"),
         Index("ix_mall_orders_buyer", "buyer_id"),
+        Index(
+            "uq_mall_orders_idempotency",
+            "couple_id",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+        ),
     )

@@ -4421,6 +4421,18 @@
               }
             ],
             "title": "Remark"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key"
           }
         },
         "type": "object",
@@ -5157,6 +5169,18 @@
               }
             ],
             "title": "Event Id"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key"
           }
         },
         "type": "object",
@@ -7049,6 +7073,18 @@
           "item_id": {
             "type": "integer",
             "title": "Item Id"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key"
           }
         },
         "type": "object",
@@ -7056,7 +7092,7 @@
           "item_id"
         ],
         "title": "OrderCreate",
-        "description": "购买请求。只需要商品 id，价格由服务端决定。"
+        "description": "购买请求。价格由服务端决定。\n\nidempotency_key 由客户端生成，防止网络重试导致重复扣币。"
       },
       "OrderOut": {
         "properties": {
@@ -7582,6 +7618,18 @@
               }
             ],
             "title": "Description"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key"
           }
         },
         "type": "object",

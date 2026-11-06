@@ -6,6 +6,7 @@ personal     双方   作者   作者
 shared       双方   双方   双方
 """
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
@@ -26,19 +27,35 @@ async def create(
     mode 默认 personal：大多数记录是个人视角，
     共同编辑需要双方有意识地选择。
     """
-    diary = await repo.create(
-        session,
-        couple_id=couple.id,
-        author_id=author.id,
-        mode=body.mode,
-        title=body.title,
-        content=body.content,
-        mood_tags=body.mood_tags,
-        location=body.location,
-        images=body.images,
-        event_id=body.event_id,
-    )
-    await session.commit()
+    key = body.idempotency_key
+    if key:
+        existing = await repo.get_by_idempotency_key(session, couple.id, key)
+        if existing is not None:
+            return existing
+
+    try:
+        diary = await repo.create(
+            session,
+            couple_id=couple.id,
+            author_id=author.id,
+            mode=body.mode,
+            title=body.title,
+            content=body.content,
+            mood_tags=body.mood_tags,
+            location=body.location,
+            images=body.images,
+            event_id=body.event_id,
+            idempotency_key=key,
+        )
+        await session.commit()
+    except IntegrityError:
+        # 并发提交同一个 key：唯一索引兜底，返回先成功的那条
+        await session.rollback()
+        existing = await repo.get_by_idempotency_key(session, couple.id, key)
+        if existing is not None:
+            return existing
+        raise
+
     await session.refresh(diary)
     # 事务提交后再入队，避免索引任务读到未提交的数据
     await enqueue("index_diary", diary.id)

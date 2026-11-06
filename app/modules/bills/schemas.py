@@ -21,6 +21,8 @@ class BillCreate(BaseModel):
     scope: Literal["shared", "personal"] = "shared"
     is_private: bool = False
     remark: str | None = Field(default=None, max_length=500)
+    # 客户端生成的稳定值，重复提交只创建一条
+    idempotency_key: str | None = Field(default=None, max_length=64)
 
 
 class BillOut(BaseModel):

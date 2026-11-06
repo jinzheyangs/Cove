@@ -72,15 +72,37 @@ async def list_by_creator(
 
 
 async def create_order(
-    session: AsyncSession, *, item_id: int, couple_id: int, buyer_id: int, price: int
+    session: AsyncSession,
+    *,
+    item_id: int,
+    couple_id: int,
+    buyer_id: int,
+    price: int,
+    idempotency_key: str | None = None,
 ) -> MallOrder:
     """创建待兑现订单。price 是成交时的价格快照。"""
     order = MallOrder(
-        item_id=item_id, couple_id=couple_id, buyer_id=buyer_id, price=price
+        item_id=item_id,
+        couple_id=couple_id,
+        buyer_id=buyer_id,
+        price=price,
+        idempotency_key=idempotency_key,
     )
     session.add(order)
     await session.flush()
     return order
+
+
+async def get_order_by_idempotency_key(
+    session: AsyncSession, couple_id: int, key: str
+) -> MallOrder | None:
+    """按幂等键查已创建的订单。"""
+    return await session.scalar(
+        select(MallOrder).where(
+            MallOrder.couple_id == couple_id,
+            MallOrder.idempotency_key == key,
+        )
+    )
 
 
 async def count_orders(session: AsyncSession, item_id: int) -> int:

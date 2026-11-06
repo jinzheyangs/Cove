@@ -21,6 +21,8 @@ class DiaryCreate(BaseModel):
     images: list[str] = Field(default_factory=list, max_length=20)
     # 「各自视角」：同一件事的两个人传同一个 event_id
     event_id: str | None = Field(default=None, max_length=36)
+    # 客户端生成的稳定值（如 UUID），重复提交只创建一条
+    idempotency_key: str | None = Field(default=None, max_length=64)
 
 
 class DiaryUpdate(BaseModel):

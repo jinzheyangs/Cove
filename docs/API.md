@@ -653,6 +653,7 @@ Base URL: https://<你的域名>/api/v1
 | `scope` | "shared" \| "personal" | 否 |
 | `is_private` | bool | 否 |
 | `remark` | string? | 否 |
+| `idempotency_key` | string? | 否 |
 
 **响应 data**
 
@@ -707,6 +708,7 @@ Base URL: https://<你的域名>/api/v1
 | `scope` | "shared" \| "personal" | 否 |
 | `is_private` | bool | 否 |
 | `remark` | string? | 否 |
+| `idempotency_key` | string? | 否 |
 
 **响应 data**
 
@@ -1238,6 +1240,7 @@ Base URL: https://<你的域名>/api/v1
 | `location` | string? | 否 |
 | `images` | string[] | 否 |
 | `event_id` | string? | 否 |
+| `idempotency_key` | string? | 否 |
 
 **响应 data**
 
@@ -1645,6 +1648,7 @@ Base URL: https://<你的域名>/api/v1
 | 字段 | 类型 | 必填 |
 |---|---|---|
 | `item_id` | int | 是 |
+| `idempotency_key` | string? | 否 |
 
 **响应 data**
 
@@ -2003,6 +2007,7 @@ Base URL: https://<你的域名>/api/v1
 | `category` | string | 是 |
 | `title` | string | 是 |
 | `description` | string? | 否 |
+| `idempotency_key` | string? | 否 |
 
 **响应 data**
 

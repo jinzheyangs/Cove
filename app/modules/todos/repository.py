@@ -17,6 +17,18 @@ async def create(session: AsyncSession, *, couple_id: int, creator_id: int, **va
     return todo
 
 
+async def get_by_idempotency_key(
+    session: AsyncSession, couple_id: int, key: str
+) -> TodoItem | None:
+    """按幂等键查已创建的清单项。"""
+    return await session.scalar(
+        select(TodoItem).where(
+            TodoItem.couple_id == couple_id,
+            TodoItem.idempotency_key == key,
+        )
+    )
+
+
 async def get(session: AsyncSession, todo_id: int) -> TodoItem | None:
     """按主键读取。越权判断在 service 层。"""
     return await session.get(TodoItem, todo_id)

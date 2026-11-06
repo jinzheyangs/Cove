@@ -45,9 +45,13 @@ class ItemOut(BaseModel):
 
 
 class OrderCreate(BaseModel):
-    """购买请求。只需要商品 id，价格由服务端决定。"""
+    """购买请求。价格由服务端决定。
+
+    idempotency_key 由客户端生成，防止网络重试导致重复扣币。
+    """
 
     item_id: int
+    idempotency_key: str | None = Field(default=None, max_length=64)
 
 
 class OrderOut(BaseModel):

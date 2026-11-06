@@ -7,6 +7,7 @@
 
 from datetime import UTC, datetime
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
@@ -21,16 +22,32 @@ async def create(
     session: AsyncSession, couple: Couple, creator: User, body: TodoCreate
 ) -> TodoItem:
     """新建清单项。默认进共同清单。"""
-    todo = await repo.create(
-        session,
-        couple_id=couple.id,
-        creator_id=creator.id,
-        type=body.type,
-        category=body.category,
-        title=body.title,
-        description=body.description,
-    )
-    await session.commit()  #提交事务，数据真正永久写到数据库
+    key = body.idempotency_key
+    if key:
+        existing = await repo.get_by_idempotency_key(session, couple.id, key)
+        if existing is not None:
+            return existing
+
+    try:
+        todo = await repo.create(
+            session,
+            couple_id=couple.id,
+            creator_id=creator.id,
+            type=body.type,
+            category=body.category,
+            title=body.title,
+            description=body.description,
+            idempotency_key=key,
+        )
+        await session.commit()  # 提交事务，数据真正永久写到数据库
+    except IntegrityError:
+        # 并发提交同一个 key：唯一索引兜底，返回先成功的那条
+        await session.rollback()
+        existing = await repo.get_by_idempotency_key(session, couple.id, key)
+        if existing is not None:
+            return existing
+        raise
+
     # 从数据库重新查一遍，把最新数据覆盖到本地 ORM 对象上
     await session.refresh(todo)
     return todo

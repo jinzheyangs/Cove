@@ -16,6 +16,7 @@ from sqlalchemy import (
     String,
     Text,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -44,6 +45,8 @@ class TodoItem(Base):
     )
     # 个人清单的权限依据
     creator_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
+    # 客户端幂等键：同一个 key 重复提交只创建一条
+    idempotency_key: Mapped[str | None] = mapped_column(String(64))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -56,4 +59,11 @@ class TodoItem(Base):
         ),
         # 列表按关系 + 类型过滤
         Index("ix_todo_items_couple_type", "couple_id", "type"),
+        Index(
+            "uq_todo_items_idempotency",
+            "couple_id",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+        ),
     )

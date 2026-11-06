@@ -18,6 +18,7 @@ from sqlalchemy import (
     Index,
     String,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
@@ -55,6 +56,8 @@ class Diary(Base):
     )
     # personal 模式下必填；shared 模式下是最后编辑人
     author_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
+    # 客户端幂等键：同一个 key 重复提交只创建一条
+    idempotency_key: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -66,4 +69,12 @@ class Diary(Base):
         CheckConstraint("mode IN ('shared', 'personal')", name="ck_diaries_mode"),
         # 列表按关系 + 时间排序
         Index("ix_diaries_couple_created", "couple_id", "created_at"),
+        # 幂等键在关系内唯一；NULL 不参与约束
+        Index(
+            "uq_diaries_idempotency",
+            "couple_id",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+        ),
     )

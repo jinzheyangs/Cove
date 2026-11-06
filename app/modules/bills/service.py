@@ -5,6 +5,7 @@
 
 from decimal import Decimal
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
@@ -32,18 +33,33 @@ async def create(
     elif body.amount:
         raise AppError("非金钱付出不需要填写金额", code=10002, status_code=400)
 
-    bill = await repo.create(
-        session,
-        couple_id=couple.id,
-        payer_id=payer.id,
-        amount=body.amount,
-        category=body.category,
-        type=body.type,
-        scope=body.scope,
-        is_private=body.is_private,
-        remark=body.remark,
-    )
-    await session.commit()
+    key = body.idempotency_key
+    if key:
+        existing = await repo.get_by_idempotency_key(session, couple.id, key)
+        if existing is not None:
+            return existing
+
+    try:
+        bill = await repo.create(
+            session,
+            couple_id=couple.id,
+            payer_id=payer.id,
+            amount=body.amount,
+            category=body.category,
+            type=body.type,
+            scope=body.scope,
+            is_private=body.is_private,
+            remark=body.remark,
+            idempotency_key=key,
+        )
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        existing = await repo.get_by_idempotency_key(session, couple.id, key)
+        if existing is not None:
+            return existing
+        raise
+
     await session.refresh(bill)
     return bill
 
