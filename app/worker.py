@@ -18,6 +18,7 @@ from app.core.db import SessionLocal
 from app.core.logging import configure_logging
 from app.core.metrics import COIN_RECONCILE_MISMATCHES
 from app.core.tracing import setup_tracing
+from app.modules.agent import import_service as agent_import_service
 from app.modules.agent import service as agent_service
 from app.modules.ai import indexing
 from app.modules.coins import service as coin_service
@@ -73,6 +74,13 @@ async def purge_burned_secrets(ctx: dict) -> int:
 
         logger.info("清理燃尽秘密 %d 条", count)
         return count
+
+
+async def process_chat_import(ctx: dict, import_id: int) -> None:
+    """导入后生成画像并建立向量索引。"""
+    with tracer.start_as_current_span("worker.process_chat_import"):
+        async with SessionLocal() as session:
+            await agent_import_service.process_chat_import(session, import_id)
 
 
 async def cleanup_agent_conversations(ctx: dict) -> int:
@@ -131,6 +139,7 @@ class WorkerSettings:
         delete_diary_vectors,
         index_review,
         delete_user_vectors,
+        process_chat_import,
     ]
     # 错开整点执行，避免和其他系统的定时任务撞车
     cron_jobs = [

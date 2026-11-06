@@ -209,6 +209,37 @@ DELETE /agent/conversations/{id}          删除会话和消息
 - 删除会话会连同消息一起删
 - worker 每天 04:07 清理过期会话
 
+### 聊天记录导入
+
+导入格式统一为 **JSONL**，每行一个消息对象：
+
+```json
+{"sender":"我","sent_at":"2024-05-01T20:13:00+08:00","content":"今天好累"}
+{"sender":"TA","sent_at":"2024-05-01T20:14:00+08:00","content":"怎么啦"}
+```
+
+- `sender` 用上传时填的 `owner_name` 或 `partner_name`
+- `sent_at` 支持 ISO 8601、常见日期格式、Unix 秒/毫秒
+- `type` 可选，默认 `text`
+
+导入接口：
+
+```
+POST /api/v1/agent/imports   (multipart)
+  file=chat.jsonl
+  owner_name=我
+  partner_name=TA
+```
+
+规则：
+
+- 双方都授权后才能导入
+- 单次上限 20MB / 10 万条
+- 同一条消息按哈希去重，重复导入不会翻倍
+- 原始文件只在内存里解析，不落盘
+- 导入后 worker 生成风格画像和向量索引
+- 删除导入会清理消息、向量和画像
+
 ## 开发进度
 
 - [x] 项目骨架与三层架构

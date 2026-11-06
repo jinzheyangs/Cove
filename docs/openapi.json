@@ -3393,6 +3393,172 @@
         }
       }
     },
+    "/api/v1/agent/imports": {
+      "get": {
+        "tags": [
+          "agent"
+        ],
+        "summary": "List Imports",
+        "description": "查看历史导入记录和状态。",
+        "operationId": "list_imports_api_v1_agent_imports_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_list_ChatImportOut__"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "agent"
+        ],
+        "summary": "Import Chat Log",
+        "description": "导入聊天记录。\n\n双方都授权后才能导入。原始文件只在内存里解析，不落盘。\n导入后画像和向量索引在后台完成。",
+        "operationId": "import_chat_log_api_v1_agent_imports_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_import_chat_log_api_v1_agent_imports_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ChatImportOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/agent/imports/{import_id}": {
+      "get": {
+        "tags": [
+          "agent"
+        ],
+        "summary": "Get Import",
+        "description": "查看单次导入的状态和计数。",
+        "operationId": "get_import_api_v1_agent_imports__import_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "import_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Import Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ChatImportOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "agent"
+        ],
+        "summary": "Delete Import",
+        "description": "删除一次导入：消息、向量、画像一起清理。",
+        "operationId": "delete_import_api_v1_agent_imports__import_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "import_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Import Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_NoneType_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/agent/conversations": {
       "get": {
         "tags": [
@@ -4125,6 +4291,54 @@
         "title": "BindRequest",
         "description": "用邀请码绑定。\n\n长度放宽到 4-12，容忍客户端传小写或带空格，\nservice 里会统一 strip + upper。"
       },
+      "Body_import_chat_log_api_v1_agent_imports_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "JSONL 或 JSON 聊天记录"
+          },
+          "format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Format"
+          },
+          "owner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Name"
+          },
+          "partner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partner Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_import_chat_log_api_v1_agent_imports_post"
+      },
       "Body_upload_diary_image_api_v1_uploads_diary_image_post": {
         "properties": {
           "file": {
@@ -4158,6 +4372,86 @@
         ],
         "title": "CategoryStat",
         "description": "单个分类的金额合计。"
+      },
+      "ChatImportOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "format": {
+            "type": "string",
+            "title": "Format"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "total_messages": {
+            "type": "integer",
+            "title": "Total Messages"
+          },
+          "imported_messages": {
+            "type": "integer",
+            "title": "Imported Messages"
+          },
+          "indexed_windows": {
+            "type": "integer",
+            "title": "Indexed Windows"
+          },
+          "skipped_messages": {
+            "type": "integer",
+            "title": "Skipped Messages"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "filename",
+          "format",
+          "status",
+          "total_messages",
+          "imported_messages",
+          "indexed_windows",
+          "skipped_messages",
+          "error",
+          "created_at",
+          "finished_at"
+        ],
+        "title": "ChatImportOut",
+        "description": "一次聊天记录导入的状态。"
       },
       "ChatIn": {
         "properties": {
@@ -4865,6 +5159,32 @@
         },
         "type": "object",
         "title": "Envelope[BillStats]"
+      },
+      "Envelope_ChatImportOut_": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 0
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "success"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatImportOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "Envelope[ChatImportOut]"
       },
       "Envelope_ChatOut_": {
         "properties": {
@@ -5653,6 +5973,36 @@
         },
         "type": "object",
         "title": "Envelope[list[BillOut]]"
+      },
+      "Envelope_list_ChatImportOut__": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 0
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "success"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ChatImportOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "title": "Envelope[list[ChatImportOut]]"
       },
       "Envelope_list_ConversationOut__": {
         "properties": {

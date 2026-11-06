@@ -116,6 +116,12 @@ Base URL: https://<你的域名>/api/v1
 | 16003 | 400 | 文件为空 |
 | 16004 | 403 | 无权删除这个文件 |
 | 17001 | 404 | 会话不存在 |
+| 17002 | 403 | 双方都授权后才能导入聊天记录 |
+| 17003 | 413 | 单次导入的消息太多了，请拆分文件 |
+| 17004 | 413 | 文件太大 |
+| 17005 | 400 | 只支持 jsonl / json 格式 |
+| 17006 | 404 | 伴侣不存在 |
+| 17007 | 404 | 导入记录不存在 |
 
 > `429` 为限流；`500` 为未捕获异常，前端统一提示稍后重试。
 
@@ -128,6 +134,10 @@ Base URL: https://<你的域名>/api/v1
 | agent | GET | `/api/v1/agent/conversations/{conversation_id}` | 会话详情，包含消息记录。 | 是 |
 | agent | DELETE | `/api/v1/agent/conversations/{conversation_id}` | 删除会话及其全部消息。 | 是 |
 | agent | POST | `/api/v1/agent/conversations/{conversation_id}/messages` | 发送一条消息，返回分身的回复。 | 是 |
+| agent | GET | `/api/v1/agent/imports` | 查看历史导入记录和状态。 | 是 |
+| agent | POST | `/api/v1/agent/imports` | 导入聊天记录。 | 是 |
+| agent | GET | `/api/v1/agent/imports/{import_id}` | 查看单次导入的状态和计数。 | 是 |
+| agent | DELETE | `/api/v1/agent/imports/{import_id}` | 删除一次导入：消息、向量、画像一起清理。 | 是 |
 | audit | GET | `/api/v1/audit` | 查看自己发起过的敏感操作，时间倒序。 | 是 |
 | auth | POST | `/api/v1/auth/login` | 手机号 + 密码登录。 | 否 |
 | auth | POST | `/api/v1/auth/logout` | 登出当前设备：吊销传入的 refresh token。 | 否 |
@@ -317,6 +327,92 @@ Base URL: https://<你的域名>/api/v1
 | `conversation_id` | int | 是 |
 | `reply` | string | 是 |
 | `disclaimer` | string | 是 |
+
+---
+
+#### `GET /api/v1/agent/imports`
+
+查看历史导入记录和状态。
+
+**响应 data**
+
+| 字段 | 类型 | 必填 |
+|---|---|---|
+| `id` | int | 是 |
+| `filename` | string | 是 |
+| `format` | string | 是 |
+| `status` | string | 是 |
+| `total_messages` | int | 是 |
+| `imported_messages` | int | 是 |
+| `indexed_windows` | int | 是 |
+| `skipped_messages` | int | 是 |
+| `error` | string? | 是 |
+| `created_at` | datetime | 是 |
+| `finished_at` | datetime? | 是 |
+
+---
+
+#### `POST /api/v1/agent/imports`
+
+导入聊天记录。
+
+**响应 data**
+
+| 字段 | 类型 | 必填 |
+|---|---|---|
+| `id` | int | 是 |
+| `filename` | string | 是 |
+| `format` | string | 是 |
+| `status` | string | 是 |
+| `total_messages` | int | 是 |
+| `imported_messages` | int | 是 |
+| `indexed_windows` | int | 是 |
+| `skipped_messages` | int | 是 |
+| `error` | string? | 是 |
+| `created_at` | datetime | 是 |
+| `finished_at` | datetime? | 是 |
+
+---
+
+#### `GET /api/v1/agent/imports/{import_id}`
+
+查看单次导入的状态和计数。
+
+**参数**
+
+| 位置 | 名称 | 类型 | 必填 |
+|---|---|---|---|
+| path | `import_id` | int | 是 |
+
+**响应 data**
+
+| 字段 | 类型 | 必填 |
+|---|---|---|
+| `id` | int | 是 |
+| `filename` | string | 是 |
+| `format` | string | 是 |
+| `status` | string | 是 |
+| `total_messages` | int | 是 |
+| `imported_messages` | int | 是 |
+| `indexed_windows` | int | 是 |
+| `skipped_messages` | int | 是 |
+| `error` | string? | 是 |
+| `created_at` | datetime | 是 |
+| `finished_at` | datetime? | 是 |
+
+---
+
+#### `DELETE /api/v1/agent/imports/{import_id}`
+
+删除一次导入：消息、向量、画像一起清理。
+
+**参数**
+
+| 位置 | 名称 | 类型 | 必填 |
+|---|---|---|---|
+| path | `import_id` | int | 是 |
+
+**响应 data**：`null` / `object`（见实现）
 
 ---
 

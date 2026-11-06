@@ -17,9 +17,11 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.modules.agent.models import ChatImport, ChatMessage
 from app.modules.ai import embeddings, vectorstore
 from app.modules.ai.models import ChunkIndex
 from app.modules.conflicts.models import ConflictReview, ConflictSession
+from app.modules.couples.models import Couple
 from app.modules.diaries.models import Diary
 
 logger = structlog.get_logger("indexing")
@@ -233,6 +235,147 @@ async def delete_user_vectors(
     if couple_id is not None:
         stmt = stmt.where(ChunkIndex.couple_id == couple_id)
     await session.execute(stmt)
+    await session.commit()
+
+
+def _build_chat_windows(
+    messages: list[ChatMessage], target_id: int, size: int = 4
+) -> list[list[ChatMessage]]:
+    """按对话窗口切片，窗口必须包含目标用户本人的发言。
+
+    每条目标发言都生成一个窗口（带前面几条上下文），
+    这样检索命中时能看到「对方说了什么 + TA 怎么回」。
+    """
+    windows: list[list[ChatMessage]] = []
+    buffer: list[ChatMessage] = []
+
+    for message in messages:
+        if message.sender_id is None or message.msg_type != "text":
+            continue
+        buffer.append(message)
+        if len(buffer) > size:
+            buffer.pop(0)
+        if message.sender_id == target_id and len(buffer) >= 2:
+            windows.append(list(buffer))
+
+    return windows
+
+
+def _cap_windows(
+    windows: list[list[ChatMessage]], limit: int
+) -> list[list[ChatMessage]]:
+    """超过上限时均匀抽样，控制 embedding 成本。"""
+    if len(windows) <= limit:
+        return windows
+    step = len(windows) / limit
+    return [windows[int(i * step)] for i in range(limit)]
+
+
+def _format_chat_window(window: list[ChatMessage], target_id: int) -> str:
+    lines = []
+    for message in window:
+        who = "TA" if message.sender_id == target_id else "对方"
+        lines.append(f"{who}：{message.content}")
+    return "\n".join(lines)
+
+
+async def index_chat_import(session: AsyncSession, import_id: int) -> int:
+    """把一次导入的聊天记录切窗口、embedding、写 Chroma。
+
+    Returns:
+        写入的窗口数量。
+    """
+    if not embeddings.is_configured():
+        return 0
+
+    import_row = await session.get(ChatImport, import_id)
+    if import_row is None:
+        return 0
+
+    couple = await session.get(Couple, import_row.couple_id)
+    if couple is None:
+        return 0
+
+    messages = list(
+        await session.scalars(
+            select(ChatMessage)
+            .where(
+                ChatMessage.import_id == import_id,
+                ChatMessage.msg_type == "text",
+            )
+            .order_by(ChatMessage.sent_at, ChatMessage.id)
+        )
+    )
+
+    # 重建前先清掉这个导入已有的索引
+    await delete_chat_import(session, import_id)
+
+    window_no = 0
+    for target_id in (couple.user1_id, couple.user2_id):
+        windows = _cap_windows(
+            _build_chat_windows(messages, target_id), settings.RAG_CHAT_MAX_WINDOWS
+        )
+        texts = [_format_chat_window(window, target_id) for window in windows]
+
+        # 分批 embedding，避免单次请求过大
+        for start in range(0, len(texts), 100):
+            batch = texts[start : start + 100]
+            vectors = await embeddings.embed_texts(batch)
+            ids = [
+                f"chat:{import_id}:{target_id}:{window_no + i}"
+                for i in range(len(batch))
+            ]
+            metadatas = [
+                {
+                    "couple_id": import_row.couple_id,
+                    "user_id": target_id,
+                    "source_type": "chat",
+                    "source_id": import_id,
+                    "chunk_no": window_no + i,
+                }
+                for i in range(len(batch))
+            ]
+            await vectorstore.upsert(ids, vectors, batch, metadatas)
+            session.add_all(
+                [
+                    ChunkIndex(
+                        couple_id=import_row.couple_id,
+                        user_id=target_id,
+                        source_type="chat",
+                        source_id=import_id,
+                        chunk_no=window_no + i,
+                        chroma_id=ids[i],
+                        content_hash=_hash(batch[i]),
+                    )
+                    for i in range(len(batch))
+                ]
+            )
+            window_no += len(batch)
+
+    await session.commit()
+    return window_no
+
+
+async def delete_chat_import(session: AsyncSession, import_id: int) -> None:
+    """删除一次导入对应的全部向量和映射。"""
+    rows = list(
+        await session.scalars(
+            select(ChunkIndex).where(
+                ChunkIndex.source_type == "chat",
+                ChunkIndex.source_id == import_id,
+            )
+        )
+    )
+    if not rows:
+        return
+
+    await vectorstore.delete_ids([row.chroma_id for row in rows])
+    await session.execute(
+        delete(ChunkIndex).where(
+            ChunkIndex.source_type == "chat",
+            ChunkIndex.source_id == import_id,
+        )
+    )
     await session.commit()
 
 

@@ -109,6 +109,18 @@ uv run python scripts/reindex_user.py <couple_id> <user_id>
 - 撤销模拟TA 授权、注销账号会自动删除对应向量
 - embedding 没配置时检索会退回「最近记录」，功能仍可用
 
+### 聊天记录导入
+
+- 接口：`POST /agent/imports`，multipart，`file` + `owner_name` + `partner_name`
+- 格式：JSONL（每行一个 JSON）
+- 上限：20MB / 10 万条
+- 双方授权后才能导入
+- 原始文件不落盘；解析后只保留结构化消息
+- 导入后 worker 做画像和索引，`GET /agent/imports/{id}` 可以看状态
+- 删除导入会清理消息、向量和画像
+
+大文件建议按时间拆分多次导入：单次太大容易触发请求超时。
+
 ### 会话历史
 
 AI 多轮对话的消息保存在 `agent_conversations` / `agent_messages`，

@@ -48,6 +48,8 @@ class Settings(BaseSettings):
     # 切片长度与重叠，按字符数（中文场景不按 token 切）
     RAG_CHUNK_SIZE: int = 400
     RAG_CHUNK_OVERLAP: int = 50
+    # 每个用户最多索引多少个聊天窗口，控制 embedding 成本
+    RAG_CHAT_MAX_WINDOWS: int = 5000
 
     # embedding 走 OpenAI 兼容接口，供应商可换：
     # 通义 / 智谱 / 硅基流动 / 本地 vLLM 都支持
@@ -109,6 +111,11 @@ class Settings(BaseSettings):
     AGENT_RETENTION_DAYS: int = 30
     # 每次请求最多带多少轮历史（1 轮 = 用户 + 分身各一条）
     AGENT_MAX_HISTORY_TURNS: int = 10
+    # 聊天记录导入上限
+    CHAT_IMPORT_MAX_BYTES: int = 20 * 1024 * 1024
+    CHAT_IMPORT_MAX_MESSAGES: int = 100_000
+    # 每次生成画像抽样的条数
+    PERSONA_SAMPLE_SIZE: int = 50
 
     # ---------------------------------------------------------------- 队列
     # 测试环境关掉，避免每个写操作都尝试连 Redis

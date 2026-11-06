@@ -62,3 +62,21 @@ class MessageOut(BaseModel):
 
 class ConversationDetailOut(ConversationOut):
     messages: list[MessageOut]
+
+
+class ChatImportOut(BaseModel):
+    """一次聊天记录导入的状态。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    filename: str
+    format: str
+    status: str
+    total_messages: int
+    imported_messages: int
+    indexed_windows: int
+    skipped_messages: int
+    error: str | None
+    created_at: datetime
+    finished_at: datetime | None
