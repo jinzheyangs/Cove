@@ -16,6 +16,7 @@ venv/
 # ---- 数据 ----
 pgdata/
 chromadata/
+uploads/
 *.dump
 *.sql.gz
 

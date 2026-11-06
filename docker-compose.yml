@@ -17,6 +17,8 @@ services:
     volumes:
       - ./app:/app/app
       - ./migrations:/app/migrations
+      # 本地存储模式下的图片落盘到宿主机，容器重建不会丢
+      - ./uploads:/app/uploads
     command: uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   agent:
