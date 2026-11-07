@@ -1,8 +1,8 @@
 """用户与刷新令牌的表结构。"""
 
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String, func
+from sqlalchemy import BigInteger, Date, DateTime, ForeignKey, Index, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -26,6 +26,8 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     nickname: Mapped[str] = mapped_column(String(50))
     avatar: Mapped[str | None] = mapped_column(String(255), default=None)
+    # 生日。只用于纪念日倒计时，不作为身份核验信息
+    birthday: Mapped[date | None] = mapped_column(Date, default=None)
     # 非空表示账号已注销（数据已清理、手机号已脱敏）
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # 数据库侧生成时间，避免应用服务器时钟不一致

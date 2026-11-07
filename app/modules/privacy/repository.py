@@ -14,6 +14,7 @@ from app.modules.agent.models import (
     PersonaProfile,
 )
 from app.modules.ai.models import ChunkIndex
+from app.modules.anniversaries.models import Anniversary
 from app.modules.audit.models import AuditLog
 from app.modules.bills.models import Bill
 from app.modules.coin_applies.models import CoinApply
@@ -85,6 +86,7 @@ async def purge_personal_content(session: AsyncSession, user_id: int) -> None:
         (PersonaSettings, PersonaSettings.owner_id),
         (CoinApply, CoinApply.applicant_id),
         (Notification, Notification.user_id),
+        (Anniversary, Anniversary.created_by),
         (AuditLog, AuditLog.user_id),
     )
     for model, column in targets:
@@ -150,6 +152,13 @@ async def collect_export(session: AsyncSession, user_id: int) -> dict[str, list]
             select(DailyAnswer).where(DailyAnswer.user_id == user_id).order_by(DailyAnswer.id)
         )
     )
+    anniversaries = list(
+        await session.scalars(
+            select(Anniversary)
+            .where(Anniversary.created_by == user_id)
+            .order_by(Anniversary.id)
+        )
+    )
     transactions = list(
         await session.scalars(
             select(CoinTransaction)
@@ -170,5 +179,6 @@ async def collect_export(session: AsyncSession, user_id: int) -> dict[str, list]
         "bills": bills,
         "todos": todos,
         "daily": daily,
+        "anniversaries": anniversaries,
         "transactions": transactions,
     }

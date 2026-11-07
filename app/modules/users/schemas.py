@@ -3,9 +3,12 @@
 这些模型同时承担接口校验和 OpenAPI 文档生成。
 """
 
+from datetime import date as date_type
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.core.time import today
 
 
 class RegisterRequest(BaseModel):
@@ -44,6 +47,7 @@ class UserOut(BaseModel):
     nickname: str
     avatar: str | None = None   #存储oss对象
     avatar_url: str | None = None
+    birthday: date_type | None = None
     created_at: datetime    #创建时间
 
 
@@ -53,6 +57,15 @@ class ProfileUpdate(BaseModel):
     nickname: str | None = Field(default=None, min_length=1, max_length=50)
     # 头像的 object key，由 /uploads/avatar 返回
     avatar: str | None = Field(default=None, max_length=255)
+    # 传 null 可以清除生日
+    birthday: date_type | None = None
+
+    @field_validator("birthday")
+    @classmethod
+    def _birthday_not_future(cls, value: date_type | None) -> date_type | None:
+        if value is not None and value > today():
+            raise ValueError("生日不能是未来日期")
+        return value
 
 
 class ChangePasswordRequest(BaseModel):

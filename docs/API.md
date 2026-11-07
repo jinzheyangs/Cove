@@ -118,6 +118,7 @@ Base URL: https://<你的域名>/api/v1
 | 17011 | 404 | 操作不存在 |
 | 17012 | 409 | 这个操作已经不能确认了 |
 | 17013 | 400 | 不支持的操作类型 |
+| 18001 | 404 | 纪念日不存在 |
 
 > `429` 为限流；`500` 为未捕获异常，前端统一提示稍后重试。
 
@@ -136,6 +137,10 @@ Base URL: https://<你的域名>/api/v1
 | agent | POST | `/api/v1/agent/imports` | 导入聊天记录。 | 是 |
 | agent | GET | `/api/v1/agent/imports/{import_id}` | 查看单次导入的状态和计数。 | 是 |
 | agent | DELETE | `/api/v1/agent/imports/{import_id}` | 删除一次导入：消息、向量、画像一起清理。 | 是 |
+| anniversaries | GET | `/api/v1/anniversaries` | 全部倒计时：在一起、双方生日、自定义纪念日。 | 是 |
+| anniversaries | POST | `/api/v1/anniversaries` | 新建自定义纪念日。 | 是 |
+| anniversaries | PUT | `/api/v1/anniversaries/{anniversary_id}` | 修改自定义纪念日。共同纪念日双方都能改。 | 是 |
+| anniversaries | DELETE | `/api/v1/anniversaries/{anniversary_id}` | 删除自定义纪念日。 | 是 |
 | audit | GET | `/api/v1/audit` | 查看自己发起过的敏感操作，时间倒序。 | 是 |
 | auth | POST | `/api/v1/auth/change-password` | 修改密码。 | 是 |
 | auth | POST | `/api/v1/auth/login` | 手机号 + 密码登录。 | 否 |
@@ -436,6 +441,114 @@ Base URL: https://<你的域名>/api/v1
 | 位置 | 名称 | 类型 | 必填 |
 |---|---|---|---|
 | path | `import_id` | int | 是 |
+
+**响应 data**：`null` / `object`（见实现）
+
+---
+
+### anniversaries
+
+#### `GET /api/v1/anniversaries`
+
+全部倒计时：在一起、双方生日、自定义纪念日。
+
+**响应 data**
+
+| 字段 | 类型 | 必填 |
+|---|---|---|
+| `id` | int? | 否 |
+| `source` | "relationship" \| "birthday" \| "custom" | 是 |
+| `title` | string | 是 |
+| `date` | date | 是 |
+| `next_date` | date | 是 |
+| `days_left` | int | 是 |
+| `years` | int? | 否 |
+| `is_today` | bool | 是 |
+| `passed` | bool | 是 |
+| `repeat_yearly` | bool | 是 |
+| `owner_id` | int? | 否 |
+| `editable` | bool | 否 |
+
+---
+
+#### `POST /api/v1/anniversaries`
+
+新建自定义纪念日。
+
+**请求体**
+
+| 字段 | 类型 | 必填 |
+|---|---|---|
+| `title` | string | 是 |
+| `date` | date | 是 |
+| `repeat_yearly` | bool | 否 |
+| `idempotency_key` | string? | 否 |
+
+**响应 data**
+
+| 字段 | 类型 | 必填 |
+|---|---|---|
+| `id` | int? | 否 |
+| `source` | "relationship" \| "birthday" \| "custom" | 是 |
+| `title` | string | 是 |
+| `date` | date | 是 |
+| `next_date` | date | 是 |
+| `days_left` | int | 是 |
+| `years` | int? | 否 |
+| `is_today` | bool | 是 |
+| `passed` | bool | 是 |
+| `repeat_yearly` | bool | 是 |
+| `owner_id` | int? | 否 |
+| `editable` | bool | 否 |
+
+---
+
+#### `PUT /api/v1/anniversaries/{anniversary_id}`
+
+修改自定义纪念日。共同纪念日双方都能改。
+
+**参数**
+
+| 位置 | 名称 | 类型 | 必填 |
+|---|---|---|---|
+| path | `anniversary_id` | int | 是 |
+
+**请求体**
+
+| 字段 | 类型 | 必填 |
+|---|---|---|
+| `title` | string? | 否 |
+| `date` | date? | 否 |
+| `repeat_yearly` | bool? | 否 |
+
+**响应 data**
+
+| 字段 | 类型 | 必填 |
+|---|---|---|
+| `id` | int? | 否 |
+| `source` | "relationship" \| "birthday" \| "custom" | 是 |
+| `title` | string | 是 |
+| `date` | date | 是 |
+| `next_date` | date | 是 |
+| `days_left` | int | 是 |
+| `years` | int? | 否 |
+| `is_today` | bool | 是 |
+| `passed` | bool | 是 |
+| `repeat_yearly` | bool | 是 |
+| `owner_id` | int? | 否 |
+| `editable` | bool | 否 |
+
+---
+
+#### `DELETE /api/v1/anniversaries/{anniversary_id}`
+
+删除自定义纪念日。
+
+**参数**
+
+| 位置 | 名称 | 类型 | 必填 |
+|---|---|---|---|
+| path | `anniversary_id` | int | 是 |
 
 **响应 data**：`null` / `object`（见实现）
 
@@ -1883,6 +1996,7 @@ Base URL: https://<你的域名>/api/v1
 | `nickname` | string | 是 |
 | `avatar` | string? | 否 |
 | `avatar_url` | string? | 否 |
+| `birthday` | date? | 否 |
 | `created_at` | datetime | 是 |
 
 ---
@@ -1897,6 +2011,7 @@ Base URL: https://<你的域名>/api/v1
 |---|---|---|
 | `nickname` | string? | 否 |
 | `avatar` | string? | 否 |
+| `birthday` | date? | 否 |
 
 **响应 data**
 
@@ -1907,6 +2022,7 @@ Base URL: https://<你的域名>/api/v1
 | `nickname` | string | 是 |
 | `avatar` | string? | 否 |
 | `avatar_url` | string? | 否 |
+| `birthday` | date? | 否 |
 | `created_at` | datetime | 是 |
 
 ---

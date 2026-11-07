@@ -4,18 +4,15 @@
 这是整个产品里成本最低、但对留存最关键的模块。
 """
 
-from datetime import date, datetime
-from zoneinfo import ZoneInfo
+from datetime import date
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.time import today
 from app.modules.couples.models import Couple
 from app.modules.daily import repository as repo
 from app.modules.daily.schemas import DailyOut
 from app.modules.users.models import User
-
-# 按用户感知的“今天”切天。用 UTC 会导致北京时间早上 8 点才换题
-TZ = ZoneInfo("Asia/Shanghai")
 
 # 题库写死，避免依赖外部服务。改题库不会影响历史记录，
 # 因为答案表里冗余存了当天的题目文案。
@@ -45,11 +42,6 @@ QUESTIONS = [
     "最近有没有什么事，你希望我陪你一起面对？",
     "你今天想对我说一句什么？",
 ]
-
-
-def today() -> date:
-    """按北京时间取今天的日期。"""
-    return datetime.now(TZ).date()
 
 
 def question_for(day: date) -> str:

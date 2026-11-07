@@ -2380,6 +2380,182 @@
         ]
       }
     },
+    "/api/v1/anniversaries": {
+      "get": {
+        "tags": [
+          "anniversaries"
+        ],
+        "summary": "List Anniversaries",
+        "description": "全部倒计时：在一起、双方生日、自定义纪念日。\n\n按剩余天数从近到远排序；已经过去的一次性事件排在最后。",
+        "operationId": "list_anniversaries_api_v1_anniversaries_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_list_AnniversaryOut__"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "anniversaries"
+        ],
+        "summary": "Create Anniversary",
+        "description": "新建自定义纪念日。\n\nrepeat_yearly=true 表示每年重复；false 表示一次性事件。",
+        "operationId": "create_anniversary_api_v1_anniversaries_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnniversaryCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_AnniversaryOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/anniversaries/{anniversary_id}": {
+      "put": {
+        "tags": [
+          "anniversaries"
+        ],
+        "summary": "Update Anniversary",
+        "description": "修改自定义纪念日。共同纪念日双方都能改。",
+        "operationId": "update_anniversary_api_v1_anniversaries__anniversary_id__put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "anniversary_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Anniversary Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnniversaryUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_AnniversaryOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "anniversaries"
+        ],
+        "summary": "Delete Anniversary",
+        "description": "删除自定义纪念日。",
+        "operationId": "delete_anniversary_api_v1_anniversaries__anniversary_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "anniversary_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Anniversary Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_NoneType_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/sim-ta": {
       "get": {
         "tags": [
@@ -3519,6 +3695,182 @@
         ],
         "title": "ActionOut",
         "description": "待确认动作的处理结果。"
+      },
+      "AnniversaryCreate": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "repeat_yearly": {
+            "type": "boolean",
+            "title": "Repeat Yearly",
+            "default": true
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "date"
+        ],
+        "title": "AnniversaryCreate",
+        "description": "自定义纪念日。日期可以是将来的，也可以是过去的。"
+      },
+      "AnniversaryOut": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "relationship",
+              "birthday",
+              "custom"
+            ],
+            "title": "Source"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "next_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Next Date"
+          },
+          "days_left": {
+            "type": "integer",
+            "title": "Days Left"
+          },
+          "years": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Years"
+          },
+          "is_today": {
+            "type": "boolean",
+            "title": "Is Today"
+          },
+          "passed": {
+            "type": "boolean",
+            "title": "Passed"
+          },
+          "repeat_yearly": {
+            "type": "boolean",
+            "title": "Repeat Yearly"
+          },
+          "owner_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Id"
+          },
+          "editable": {
+            "type": "boolean",
+            "title": "Editable",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "title",
+          "date",
+          "next_date",
+          "days_left",
+          "is_today",
+          "passed",
+          "repeat_yearly"
+        ],
+        "title": "AnniversaryOut",
+        "description": "统一后的倒计时条目。\n\nsource 区分来源：\n- relationship：在一起，来自 couples.bind_at\n- birthday：双方生日，来自 users.birthday\n- custom：用户自定义，来自 anniversaries 表\n\ndate 是原始日期，next_date 是下一次发生的日期。\n一次性事件过期后 days_left 为负数、passed=true。"
+      },
+      "AnniversaryUpdate": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 50,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date"
+          },
+          "repeat_yearly": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repeat Yearly"
+          }
+        },
+        "type": "object",
+        "title": "AnniversaryUpdate",
+        "description": "部分更新。只传要改的字段。"
       },
       "AnswerCreate": {
         "properties": {
@@ -4796,6 +5148,32 @@
         "type": "object",
         "title": "Envelope[ActionOut]"
       },
+      "Envelope_AnniversaryOut_": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 0
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "success"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnniversaryOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "Envelope[AnniversaryOut]"
+      },
       "Envelope_ApplyOut_": {
         "properties": {
           "code": {
@@ -5493,6 +5871,36 @@
         },
         "type": "object",
         "title": "Envelope[dict]"
+      },
+      "Envelope_list_AnniversaryOut__": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 0
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "success"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AnniversaryOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "title": "Envelope[list[AnniversaryOut]]"
       },
       "Envelope_list_ApplyOut__": {
         "properties": {
@@ -6370,6 +6778,18 @@
               }
             ],
             "title": "Avatar"
+          },
+          "birthday": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Birthday"
           }
         },
         "type": "object",
@@ -7029,6 +7449,18 @@
               }
             ],
             "title": "Avatar Url"
+          },
+          "birthday": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Birthday"
           },
           "created_at": {
             "type": "string",

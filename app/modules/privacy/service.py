@@ -53,6 +53,7 @@ async def delete_account(session: AsyncSession, user: User, password: str) -> No
     user.password_hash = hash_password(uuid4().hex)
     user.nickname = "已注销"
     user.avatar = None
+    user.birthday = None
     user.deleted_at = datetime.now(UTC)
 
     # 审计记录在清理之后写，保证它不会被 purge 掉
@@ -110,6 +111,7 @@ _TODO_FIELDS = (
     "created_at",
 )
 _DAILY_FIELDS = ("day", "question", "answer", "created_at")
+_ANNIVERSARY_FIELDS = ("id", "title", "date", "repeat_yearly", "created_at")
 _TX_FIELDS = ("id", "type", "amount", "ref_type", "ref_id", "remark", "created_at")
 
 
@@ -135,6 +137,7 @@ async def export_data(session: AsyncSession, user: User) -> dict:
             "id": user.id,
             "phone": user.phone,
             "nickname": user.nickname,
+            "birthday": user.birthday,
             "created_at": user.created_at,
         },
         "couple": (
@@ -151,5 +154,8 @@ async def export_data(session: AsyncSession, user: User) -> dict:
         "bills": [_pick(b, _BILL_FIELDS) for b in raw["bills"]],
         "todos": [_pick(t, _TODO_FIELDS) for t in raw["todos"]],
         "daily": [_pick(d, _DAILY_FIELDS) for d in raw["daily"]],
+        "anniversaries": [
+            _pick(a, _ANNIVERSARY_FIELDS) for a in raw["anniversaries"]
+        ],
         "coin_transactions": [_pick(t, _TX_FIELDS) for t in raw["transactions"]],
     }

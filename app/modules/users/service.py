@@ -180,6 +180,7 @@ def to_out(user: User) -> UserOut:
         nickname=user.nickname,
         avatar=user.avatar,
         avatar_url=avatar_url,
+        birthday=user.birthday,
         created_at=user.created_at,
     )
 
@@ -207,6 +208,9 @@ async def update_profile(
             if expected is None or not avatar.startswith(expected):
                 raise AppError("头像地址不合法", code=1009, status_code=400)
         user.avatar = avatar
+
+    if "birthday" in changes:
+        user.birthday = changes["birthday"]
 
     await session.commit()
     await session.refresh(user)

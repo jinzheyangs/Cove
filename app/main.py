@@ -30,6 +30,7 @@ from app.core.queue import close_pool
 from app.core.storage import validate_storage_config
 from app.core.tracing import setup_tracing
 from app.modules.agent.router import router as agent_router
+from app.modules.anniversaries.router import router as anniversaries_router
 from app.modules.audit.router import router as audit_router
 from app.modules.bills.router import router as bills_router
 from app.modules.coin_applies.router import router as coin_applies_router
@@ -107,6 +108,7 @@ app.include_router(todos_router, prefix=API_PREFIX)
 app.include_router(bills_router, prefix=API_PREFIX)
 app.include_router(audit_router, prefix=API_PREFIX)
 app.include_router(daily_router, prefix=API_PREFIX)
+app.include_router(anniversaries_router, prefix=API_PREFIX)
 app.include_router(simta_router, prefix=API_PREFIX)
 app.include_router(privacy_router, prefix=API_PREFIX)
 app.include_router(notifications_router, prefix=API_PREFIX)
