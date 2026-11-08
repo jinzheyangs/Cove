@@ -1,0 +1,27 @@
+{
+  "name": "Cove · 两个人的地方",
+  "short_name": "Cove",
+  "description": "两个人之间，慢慢长出来的一段关系",
+  "lang": "zh-CN",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "id": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#05070d",
+  "theme_color": "#05070d",
+  "categories": ["lifestyle", "social"],
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "写一篇日记", "url": "./?view=diary&sheet=diaryNew" },
+    { "name": "藏一片叶子", "url": "./?view=tree&sheet=secretNew" },
+    { "name": "今日一问", "url": "./?sheet=answer" }
+  ]
+}

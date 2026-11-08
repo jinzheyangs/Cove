@@ -1,0 +1,1641 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+<meta name="theme-color" content="#05070d" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Cove" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="apple-touch-icon" sizes="180x180" href="icon-180.png" />
+<link rel="icon" href="icon.svg" type="image/svg+xml" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="format-detection" content="telephone=no" />
+<meta name="description" content="Cove · 两个人之间，慢慢长出来的一段关系" />
+<title>Cove — 两个人之间，慢慢长出来的一段关系</title>
+<style>
+/* ============================================================
+   Cove · tokens
+   ============================================================ */
+:root{
+  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+          "Segoe UI Variable", "Segoe UI", "PingFang SC", "HarmonyOS Sans SC",
+          "Source Han Sans SC", "Microsoft YaHei", sans-serif;
+
+  --ink:   #FFFFFF;
+  --ink-2: rgba(255,255,255,.70);
+  --ink-3: rgba(255,255,255,.44);
+  --ink-4: rgba(255,255,255,.28);
+
+  --coral: #FF7A5C;
+  --amber: #F5B45A;
+  --mint:  #5FD3B0;
+  --lilac: #A98BFF;
+
+  --pad: 16px;
+  --ease: cubic-bezier(.16,1,.3,1);
+  --spring: cubic-bezier(.32,1.24,.36,1);
+
+  --phone-w: 390px;
+  --phone-h: 844px;
+}
+
+*{ box-sizing:border-box; }
+html,body{ height:100%; margin:0; }
+body{
+  background:#05070d; color:var(--ink);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+  overflow:hidden;
+  overscroll-behavior: none;
+}
+button{ font:inherit; color:inherit; background:none; border:0; padding:0; cursor:pointer; }
+input,textarea{ font:inherit; color:inherit; background:none; border:0; outline:none; }
+:focus-visible{ outline:2px solid rgba(255,255,255,.6); outline-offset:3px; border-radius:8px; }
+
+/* ============================================================
+   舞台
+   ============================================================ */
+.stage{
+  position:fixed; inset:0; display:grid; place-items:center;
+  background:
+    radial-gradient(46% 40% at 50% 44%, rgba(120,150,255,.07), transparent 72%),
+    radial-gradient(40% 30% at 50% 100%, rgba(255,122,92,.06), transparent 72%),
+    #05070d;
+}
+.stage::after{
+  content:""; position:absolute; inset:0; z-index:0; pointer-events:none;
+  background: radial-gradient(72% 62% at 50% 45%, transparent 42%, rgba(0,0,0,.7) 100%);
+}
+.phone{
+  position:relative; z-index:1;
+  width:var(--phone-w); height:var(--phone-h);
+  border-radius:52px; background:#05070d;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,.10),
+    0 40px 80px -30px rgba(0,0,0,.95),
+    0 90px 160px -60px rgba(0,0,0,.9),
+    0 0 130px -30px rgba(120,150,255,.18);
+  overflow:hidden;
+  will-change: transform, opacity;
+}
+.screen{ position:absolute; inset:0; border-radius:52px; overflow:hidden; background:#05070d; }
+#gl{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+
+/* ============================================================
+   UI 层
+   ============================================================ */
+.ui{
+  position:absolute; inset:0; z-index:2;
+  pointer-events:none;
+  user-select:none; -webkit-user-select:none;
+  -webkit-tap-highlight-color:transparent;
+}
+.ui > *{ pointer-events:auto; }
+.glass{ background:none; }
+
+/* 滚动时顶栏下面压一层渐变，让内容"沉"下去，不和胶囊里的标题打架 */
+.topscrim{
+  position:absolute; top:0; left:0; right:0; height:156px; z-index:2;
+  pointer-events:none; opacity:0; transition:opacity .34s var(--ease);
+  background:linear-gradient(180deg, rgba(6,7,12,.95) 0%, rgba(6,7,12,.88) 46%, rgba(6,7,12,.52) 76%, rgba(6,7,12,0) 100%);
+}
+.scrolled .topscrim{
+  opacity:1;
+  backdrop-filter:blur(16px) saturate(125%);
+  -webkit-backdrop-filter:blur(16px) saturate(125%);
+}
+.view{ z-index:1 }
+
+/* 欢迎 / 登录 */
+.welcome{
+  position:absolute; inset:0; z-index:9;
+  display:flex; flex-direction:column; justify-content:center;
+  padding:0 30px 34px;
+  background:radial-gradient(120% 68% at 50% 2%, #221A2E 0%, #0B0A12 42%, #05060B 100%);
+  opacity:1; transition:opacity .62s var(--ease), transform .62s var(--ease);
+}
+.welcome.out{ opacity:0; transform:scale(1.03); pointer-events:none; }
+.welcome[hidden]{ display:none; }
+.wstep[hidden]{ display:none; }
+.welcome__top{ margin-bottom:40px; padding-top:0; }
+.wmark{ display:flex; align-items:center; gap:11px; }
+.wmark svg{ width:44px; height:26px; flex:0 0 auto; overflow:visible; }
+.wmark b{ font-size:25px; font-weight:640; letter-spacing:-.035em; }
+.wtag{
+  margin:14px 0 0; font-size:12.5px; line-height:1.8; color:var(--ink-2); letter-spacing:.01em; max-width:15em;
+}
+.wstep{ display:flex; flex-direction:column; }
+.wlabel{
+  font-size:9.5px; font-weight:700; letter-spacing:.2em; color:var(--ink-3);
+  margin:0 0 9px 2px;
+}
+.wfield{
+  display:flex; align-items:center; gap:10px; height:52px; padding:0 16px;
+  border-radius:16px; background:rgba(255,255,255,.055);
+  box-shadow:0 0 0 .5px rgba(255,255,255,.14) inset, 0 12px 30px -18px rgba(0,0,0,.9);
+  transition:box-shadow .35s var(--ease), background .35s;
+}
+.wfield:focus-within{ background:rgba(255,255,255,.085); box-shadow:0 0 0 1px rgba(255,150,120,.6) inset, 0 14px 34px -18px rgba(0,0,0,.9); }
+.wfield span{ font-size:13px; color:var(--ink-3); font-weight:600; letter-spacing:.02em; }
+.wfield input{
+  flex:1; min-width:0; background:none; border:0; outline:0; color:#fff;
+  font:inherit; font-size:16px; font-weight:600; letter-spacing:.06em;
+}
+.wfield input::placeholder{ color:rgba(255,255,255,.24); font-weight:500; letter-spacing:.04em; }
+.wcode{ display:flex; gap:9px; }
+.wcode input{
+  flex:1; height:56px; border-radius:16px; text-align:center;
+  background:rgba(255,255,255,.055); border:0; outline:0; color:#fff;
+  font:inherit; font-size:21px; font-weight:700; font-variant-numeric:tabular-nums;
+  box-shadow:0 0 0 .5px rgba(255,255,255,.14) inset;
+  transition:box-shadow .3s var(--ease), background .3s;
+}
+.wcode input:focus{ background:rgba(255,255,255,.085); box-shadow:0 0 0 1px rgba(255,150,120,.6) inset; }
+.wbtn{
+  height:54px; border-radius:17px; margin-top:12px; width:100%;
+  font-size:14.5px; font-weight:640; letter-spacing:.01em; color:#190B08;
+  background:linear-gradient(160deg,#FFD9B4,#FF9478 54%,#F0685A);
+  box-shadow:0 16px 38px -16px rgba(255,120,92,.9), 0 1px 0 rgba(255,255,255,.5) inset;
+  transition:transform .45s var(--spring), filter .3s;
+}
+.wbtn:active{ transform:scale(.975); filter:brightness(1.06); }
+.wbtn[disabled]{ filter:grayscale(.5) brightness(.7); pointer-events:none; }
+.wlink{
+  margin:16px auto 0; font-size:12.5px; color:var(--ink-2); font-weight:560;
+  letter-spacing:.01em; padding:8px 6px; transition:color .3s;
+}
+.wlink:hover{ color:#fff; }
+.wlegal{
+  margin:26px 0 0; text-align:center; font-size:10px; line-height:1.7;
+  color:rgba(255,255,255,.26); letter-spacing:.03em;
+}
+.wlegal u{ text-decoration:none; color:rgba(255,255,255,.44); }
+.wbadge{
+  align-self:flex-start;
+  display:inline-flex; align-items:center; gap:6px; margin-bottom:18px;
+  padding:6px 11px; border-radius:100px; font-size:10px; font-weight:640; letter-spacing:.1em;
+  color:#FFC7B4; background:rgba(255,122,92,.13); box-shadow:0 0 0 .5px rgba(255,140,110,.3) inset;
+}
+.wbadge i{ width:5px; height:5px; border-radius:50%; background:#FFAE92; box-shadow:0 0 8px #FF8A6E; }
+
+.statusbar{
+  position:absolute; top:0; left:0; right:0; height:50px; z-index:4;
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0 26px 0 30px;
+  font-size:14px; font-weight:600; letter-spacing:-.01em;
+  pointer-events:none;
+}
+.sb-r{ display:flex; align-items:center; gap:5px; }
+
+/* 顶部胶囊 */
+.cap{
+  position:absolute; top:56px; left:var(--pad); right:var(--pad); height:50px; z-index:3;
+  display:flex; align-items:center; gap:10px; padding:0 8px 0 14px;
+  opacity:0; transform:translateY(-8px);
+  transition: opacity .7s var(--ease), transform .7s var(--ease);
+}
+.cap.in{ opacity:1; transform:none; }
+.cap__t{ flex:1; font-size:13.5px; font-weight:620; letter-spacing:.01em; }
+.cap__t small{ display:block; font-size:10px; font-weight:500; color:var(--ink-3); letter-spacing:.06em; margin-top:2px; }
+.cap__t small b{ font-weight:600; color:rgba(255,255,255,.6) }
+.cap__btn{
+  width:34px; height:34px; border-radius:50%; display:grid; place-items:center;
+  color:rgba(255,255,255,.8); position:relative;
+  transition: background .3s, transform .45s var(--spring);
+}
+.cap__btn:hover{ background:rgba(255,255,255,.09); }
+.cap__btn:active{ transform:scale(.9); }
+.dot{
+  position:absolute; top:7px; right:8px; width:6px; height:6px; border-radius:50%;
+  background:var(--coral); box-shadow:0 0 0 2px rgba(5,7,13,.9);
+}
+
+/* 视图 */
+.view{
+  position:absolute; inset:0;
+  padding: 132px var(--pad) 158px;
+  overflow-y:auto; overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;
+  scrollbar-width:none;
+  opacity:0; pointer-events:none;
+  transition: opacity .4s var(--ease);
+}
+.view::-webkit-scrollbar{ display:none; }
+.view.on{ opacity:1; pointer-events:auto; }
+.view.on > *{ animation: rise .7s var(--ease) both; }
+.view.on > *:nth-child(1){ animation-delay:.02s }
+.view.on > *:nth-child(2){ animation-delay:.07s }
+.view.on > *:nth-child(3){ animation-delay:.12s }
+.view.on > *:nth-child(4){ animation-delay:.17s }
+.view.on > *:nth-child(5){ animation-delay:.22s }
+.view.on > *:nth-child(6){ animation-delay:.27s }
+@keyframes rise{
+  from{ opacity:0; transform:translateY(14px); filter:blur(6px); }
+  to{ opacity:1; transform:none; filter:none; }
+}
+
+/* 大标题 */
+.hd{ margin-bottom:18px; }
+.hd__k{
+  display:flex; align-items:center; gap:8px;
+  font-size:9.5px; font-weight:700; letter-spacing:.2em; color:var(--ink-3);
+  margin-bottom:10px;
+  text-shadow:0 1px 10px rgba(0,0,0,.5);
+}
+.hd__k i{ width:16px; height:1px; background:rgba(255,255,255,.24); }
+.hd h1{
+  margin:0; font-size:34px; line-height:1.04; font-weight:700; letter-spacing:-.04em;
+  text-shadow:0 2px 26px rgba(0,0,0,.5);
+}
+.hd h1 em{ font-style:normal; color:var(--ink-3); font-weight:600; }
+.hd p{ margin:8px 0 0; font-size:12px; line-height:1.6; color:var(--ink-2); letter-spacing:.01em; text-shadow:0 1px 12px rgba(0,0,0,.5); }
+
+/* 天数 */
+.days{
+  display:flex; align-items:baseline; gap:6px; margin:4px 0 0;
+  font-size:64px; font-weight:700; letter-spacing:-.05em; line-height:.9;
+  font-variant-numeric:tabular-nums;
+  text-shadow:0 4px 40px rgba(0,0,0,.55);
+}
+.days b{ font-weight:inherit; }
+.days span{ font-size:13px; font-weight:600; letter-spacing:.14em; color:var(--ink-3); }
+
+/* 玻璃卡 */
+.card{
+  position:relative; border-radius:24px; padding:16px;
+  display:block; width:100%; text-align:left;
+}
+.card + .card{ margin-top:10px; }
+.card__hd{ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+.card__hd h2{ margin:0; font-size:14px; font-weight:640; letter-spacing:-.01em; }
+.card__hd span{ font-size:10.5px; color:var(--ink-3); }
+
+/* 双卡 */
+.chips{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.chip{
+  border-radius:22px; padding:14px; text-align:left;
+  display:flex; flex-direction:column; gap:3px; min-height:96px;
+  position:relative; overflow:hidden;
+}
+.chip b{ font-size:25px; font-weight:700; letter-spacing:-.04em; font-variant-numeric:tabular-nums; margin-top:7px; }
+.chip b small{ font-size:11px; font-weight:600; color:var(--ink-3); letter-spacing:0; margin-left:2px; }
+.chip span{ font-size:10.5px; color:var(--ink-3); }
+.chip .ico{ position:absolute; right:12px; top:12px; opacity:.9; }
+
+/* 列表行 */
+.rows{ display:flex; flex-direction:column; }
+.row{
+  display:flex; align-items:center; gap:12px; width:100%; text-align:left;
+  padding:12px 2px; border-bottom:.5px solid rgba(255,255,255,.08);
+  transition: transform .4s var(--spring), opacity .3s;
+}
+.row:last-child{ border-bottom:0; }
+.row:active{ transform:scale(.985); opacity:.86; }
+.row__ic{
+  width:30px; height:30px; border-radius:9px; flex:0 0 auto;
+  display:grid; place-items:center; color:#fff; font-size:11px; font-weight:700;
+}
+.ic-gold{ background:linear-gradient(140deg,#FFD07A,#EFA92E); }
+.ic-coral{ background:linear-gradient(140deg,#FF9C82,#F2543F); }
+.ic-mint{ background:linear-gradient(140deg,#8FE8D0,#3EB79A); }
+.ic-lilac{ background:linear-gradient(140deg,#C6B4FF,#8A72F0); }
+.ic-slate{ background:linear-gradient(140deg,#B9C4D6,#6E7C93); }
+.row__b{ flex:1; min-width:0; }
+.row__t{ font-size:13.5px; font-weight:560; letter-spacing:-.005em; display:flex; align-items:center; gap:7px; }
+.row__m{ font-size:10.5px; color:var(--ink-3); margin-top:3px; }
+.row__v{ font-size:12px; color:var(--ink-3); font-variant-numeric:tabular-nums; }
+.chev{ opacity:.4; flex:0 0 auto; }
+
+.tag{
+  font-size:9px; font-weight:700; letter-spacing:.04em; padding:2px 6px;
+  border-radius:5px; background:rgba(169,139,255,.18); color:#C7B3FF;
+}
+.tag--hot{ background:rgba(255,122,92,.18); color:#FFB0A0; }
+.tag--mint{ background:rgba(95,211,176,.16); color:#8FE8D0; }
+
+/* 今日一问 */
+.qa__q{ font-size:16px; line-height:1.5; font-weight:560; letter-spacing:-.012em; min-height:2.8em; }
+.qa__f{ display:flex; gap:8px; margin-top:14px; }
+.btn{
+  display:inline-flex; align-items:center; justify-content:center; gap:6px;
+  height:38px; padding:0 16px; border-radius:100px;
+  font-size:12.5px; font-weight:620; letter-spacing:.01em;
+  transition: transform .45s var(--spring), background .3s;
+}
+.btn:active{ transform:scale(.94); }
+.btn--p{ background:#fff; color:#0a0d14; }
+.btn--g{ background:rgba(255,255,255,.10); color:var(--ink-2); }
+.btn--w{ width:100%; height:46px; border-radius:15px; font-size:13.5px; }
+
+/* 纪念日 */
+.rail{ display:flex; gap:9px; overflow-x:auto; margin:0 -16px; padding:0 16px 2px; scrollbar-width:none; }
+.rail::-webkit-scrollbar{ display:none; }
+.ann{
+  flex:0 0 auto; width:104px; border-radius:18px; padding:12px;
+  background:rgba(255,255,255,.06);
+  box-shadow:0 0 0 .5px rgba(255,255,255,.09) inset;
+}
+.ann span{ font-size:10px; color:var(--ink-3); }
+.ann b{ display:block; font-size:24px; font-weight:700; letter-spacing:-.04em; margin-top:7px; font-variant-numeric:tabular-nums; }
+.ann i{ font-style:normal; font-size:10px; color:var(--ink-3); }
+.ann--hot b{ color:var(--coral); }
+
+/* 秘密树 */
+.tree{ width:100%; height:auto; display:block; }
+.leafbtn{
+  position:absolute; right:14px; bottom:14px; height:34px; padding:0 15px; border-radius:100px;
+  font-size:11.5px; font-weight:620; letter-spacing:.01em; color:#FFD8CB;
+  background:rgba(38,22,24,.62);
+  box-shadow:0 0 0 .5px rgba(255,146,116,.42) inset, 0 10px 26px -10px rgba(255,122,92,.85);
+  transition:transform .45s var(--spring), background .3s;
+}
+.leafbtn:active{ transform:scale(.94); background:rgba(52,28,30,.72); }
+.leaf{ cursor:pointer; opacity:0; animation: leafIn .9s var(--spring) forwards, float 7s ease-in-out infinite; }
+@keyframes leafIn{ from{ opacity:0; transform:scale(.2) } to{ opacity:1; transform:scale(1) } }
+@keyframes float{ 0%,100%{ transform:translate(0,0) } 50%{ transform:translate(2px,-4px) } }
+.branch{ fill:none; stroke:url(#tg); stroke-linecap:round; stroke-dasharray:460; stroke-dashoffset:460; animation: draw 1.6s var(--ease) forwards; }
+@keyframes draw{ to{ stroke-dashoffset:0 } }
+
+.ember{ display:flex; align-items:center; gap:10px; padding:12px 2px; border-bottom:.5px solid rgba(255,255,255,.08); width:100%; text-align:left; }
+.ember:last-child{ border-bottom:0 }
+.ember i{ width:6px; height:6px; border-radius:50%; background:var(--coral); flex:0 0 auto; box-shadow:0 0 0 0 rgba(255,122,92,.5); animation:pulse 2.6s ease-out infinite; }
+@keyframes pulse{ 0%{box-shadow:0 0 0 0 rgba(255,122,92,.5)} 70%{box-shadow:0 0 0 11px rgba(255,122,92,0)} 100%{box-shadow:0 0 0 0 rgba(255,122,92,0)} }
+.ember b{ flex:1; font-size:13px; font-weight:520; }
+.ember time{ font-size:10.5px; color:var(--coral); font-variant-numeric:tabular-nums; font-weight:600; }
+
+/* tab */
+.tabs{
+  position:absolute; bottom:14px; left:var(--pad); right:var(--pad); height:78px; z-index:3;
+  display:flex; align-items:center; padding:0 4px;
+}
+.tab{
+  flex:1; height:66px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+  color:rgba(255,255,255,.52); position:relative; z-index:1;
+  text-shadow:0 1px 4px rgba(0,0,0,.4);
+  transition: color .35s var(--ease);
+}
+.tab span{ font-size:9.5px; font-weight:600; letter-spacing:.02em; }
+.tab.on{ color:#fff; }
+.tab.on svg{ transform:translateY(-1px) scale(1.05); }
+.tab svg{ transition: transform .5s var(--spring); }
+.tab:active svg{ transform:scale(.86); }
+
+/* 面板 */
+.scrim{ position:absolute; inset:0; opacity:0; pointer-events:none; will-change:opacity; }
+.sheet{ position:absolute; z-index:4; left:var(--pad); overflow:hidden; opacity:0; will-change:top,height; border-radius:28px; }
+.sheet__in{ position:absolute; inset:0; padding:18px 18px 16px; display:flex; flex-direction:column; }
+.sheet__scroll{ overflow-y:auto; flex:1; padding-bottom:30px; scrollbar-width:none; }
+.sheet__scroll::-webkit-scrollbar{ display:none; }
+.sheet__grab{ width:36px; height:4px; border-radius:100px; background:rgba(255,255,255,.18); margin:0 auto 14px; flex:0 0 auto; }
+.sheet h3{ margin:0; font-size:21px; font-weight:700; letter-spacing:-.03em; }
+.sheet .sub{ margin:7px 0 16px; font-size:12px; line-height:1.65; color:var(--ink-2); }
+.bal{
+  display:flex; align-items:baseline; gap:6px; padding:16px 18px; border-radius:18px; margin-bottom:14px;
+  background:linear-gradient(140deg, rgba(245,180,90,.20), rgba(255,122,92,.10));
+  box-shadow:0 0 0 .5px rgba(245,180,90,.2) inset;
+}
+.bal b{ font-size:38px; font-weight:700; letter-spacing:-.045em; font-variant-numeric:tabular-nums; }
+.bal span{ font-size:12px; color:var(--ink-2); }
+.kv{ display:flex; align-items:center; justify-content:space-between; gap:14px; padding:11px 0; border-bottom:.5px solid rgba(255,255,255,.08); }
+.kv:last-child{ border-bottom:0 }
+.kv__l{ font-size:13px; }
+.kv__t{ font-size:10.5px; color:var(--ink-3); margin-top:3px; }
+.kv__v{ font-size:13px; font-weight:620; font-variant-numeric:tabular-nums; flex:0 0 auto; }
+.plus{ color:var(--mint) } .minus{ color:var(--coral) }
+.cta{ display:flex; gap:9px; margin-top:16px; }
+.cta .btn{ flex:1; height:46px; border-radius:15px; font-size:13.5px; }
+
+.field{
+  display:flex; align-items:center; gap:10px;
+  padding:13px 14px; border-radius:14px; margin-bottom:9px;
+  background:rgba(255,255,255,.06);
+  box-shadow:0 0 0 .5px rgba(255,255,255,.09) inset;
+}
+.field label{ font-size:11px; color:var(--ink-3); flex:0 0 auto; }
+.field input, .field textarea{ flex:1; font-size:13.5px; min-width:0; resize:none; }
+.field input::placeholder, .field textarea::placeholder{ color:var(--ink-4); }
+
+.bubble{ max-width:82%; padding:10px 13px; border-radius:16px; font-size:13px; line-height:1.55; margin-bottom:9px; }
+.bubble--ta{ background:rgba(255,255,255,.10); border-bottom-left-radius:5px; }
+.bubble--me{ background:rgba(255,122,92,.85); color:#1a0d09; margin-left:auto; border-bottom-right-radius:5px; }
+
+/* 提示 */
+.hint{
+  position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
+  font-size:10.5px; letter-spacing:.1em; color:rgba(255,255,255,.26);
+  pointer-events:none; opacity:0;
+  animation: hintIn .8s var(--ease) 2.2s forwards, hintOut 1s ease 11s forwards;
+}
+@keyframes hintIn{ to{opacity:1} } @keyframes hintOut{ to{opacity:0} }
+.dbg{ position:fixed; left:10px; top:10px; font:10px/1.5 ui-monospace,monospace; color:#7CFFB2; white-space:pre; display:none; background:rgba(0,0,0,.5); padding:6px 8px; border-radius:6px; }
+.dbg.on{ display:block }
+.err{ position:fixed; inset:auto 10px 10px; font:12px/1.5 ui-monospace,monospace; color:#ff9a9a; background:rgba(40,0,0,.85); padding:10px; border-radius:8px; display:none; white-space:pre-wrap; }
+.err.on{ display:block }
+
+.no-gl .glass{ background:rgba(255,255,255,.08); backdrop-filter:blur(26px) saturate(160%); -webkit-backdrop-filter:blur(26px) saturate(160%); box-shadow:0 0 0 .5px rgba(255,255,255,.15) inset; border-radius:24px; }
+
+@media (max-height:900px){ :root{ --phone-h:812px; } }
+@media (max-height:860px){ :root{ --phone-h:778px; } }
+@media (max-width:560px){
+  .stage{ background:#05070d }
+  .stage::after{ display:none }
+  .phone{ width:100vw; height:100vh; height:100dvh; border-radius:0; box-shadow:none; }
+  .screen{ border-radius:0 }
+  .hint{ display:none }
+}
+
+/* 装到主屏之后（standalone）：系统已经有了真的状态栏，别再把假的那个画上去；
+   顶部/底部改用安全区，避开刘海和 Home 指示条。类名由 JS 依据 display-mode 打上。 */
+html.sa .statusbar{ display:none }
+html.sa .cap{ top:calc(18px + env(safe-area-inset-top, 0px)) }
+html.sa .view{
+  padding-top:calc(96px + env(safe-area-inset-top, 0px));
+  padding-bottom:calc(96px + env(safe-area-inset-bottom, 0px));
+}
+html.sa .tabs{ bottom:calc(14px + env(safe-area-inset-bottom, 0px)) }
+html.sa .welcome{ padding-top:env(safe-area-inset-top, 0px) }
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{ animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important; }
+  .view.on > *{ animation:none; opacity:1; transform:none; filter:none; }
+}
+</style>
+</head>
+<body>
+
+<div class="stage">
+  <div class="phone" id="phone">
+    <div class="screen" id="screen">
+      <canvas id="gl"></canvas>
+
+      <div class="ui" id="ui">
+        <div class="statusbar">
+          <b id="clock">9:41</b>
+          <span class="sb-r">
+            <svg width="17" height="11" viewBox="0 0 17 11" fill="currentColor" aria-hidden="true"><rect x="0" y="7" width="3" height="4" rx="1"/><rect x="4.5" y="5" width="3" height="6" rx="1"/><rect x="9" y="2.5" width="3" height="8.5" rx="1"/><rect x="13.5" y="0" width="3" height="11" rx="1" opacity=".35"/></svg>
+            <svg width="16" height="11" viewBox="0 0 16 12" fill="none" aria-hidden="true"><path d="M1 4.2a10.5 10.5 0 0 1 14 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M3.9 7.1a6.4 6.4 0 0 1 8.2 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="8" cy="10.2" r="1.2" fill="currentColor"/></svg>
+            <svg width="26" height="12" viewBox="0 0 26 12" fill="none" aria-hidden="true"><rect x=".6" y=".6" width="21" height="10.8" rx="3.2" stroke="currentColor" stroke-opacity=".38" stroke-width="1.1"/><rect x="2.2" y="2.2" width="15.6" height="7.6" rx="2" fill="currentColor"/><path d="M23.4 4.3v3.4a2 2 0 0 0 0-3.4Z" fill="currentColor" fill-opacity=".4"/></svg>
+          </span>
+        </div>
+
+        <header class="cap glass" id="cap">
+          <div class="cap__t" id="capT">今天<small>在一起的第 <b id="capDays">1240</b> 天</small></div>
+          <button class="cap__btn" id="bell" aria-label="通知">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6.5 9.5a5.5 5.5 0 0 1 11 0c0 3.2.8 4.8 1.6 5.6.5.5.1 1.4-.6 1.4H5.5c-.7 0-1.1-.9-.6-1.4.8-.8 1.6-2.4 1.6-5.6Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M10 19.2a2.1 2.1 0 0 0 4 0" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            <span class="dot"></span>
+          </button>
+          <button class="cap__btn" id="meBtn" aria-label="我们">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="8.4" r="3.8" stroke="currentColor" stroke-width="1.6"/><path d="M4.8 20.2c0-3.4 3.2-5.6 7.2-5.6s7.2 2.2 7.2 5.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          </button>
+        </header>
+
+        <!-- ===================== 今天 ===================== -->
+        <section class="view on" data-view="today">
+          <div class="hd">
+            <div class="hd__k"><i></i><span id="todayDate">11月8日 · 周六</span></div>
+            <h1 style="font-size:27px">早安，<em>林深</em></h1>
+            <p>今天也慢慢来。有些话不必急着说，Cove 会替你们留着。</p>
+          </div>
+
+          <div>
+            <div class="days"><b id="bigDays">1,240</b><span>天</span></div>
+            <p style="margin:10px 0 0;font-size:11.5px;color:var(--ink-3);text-shadow:0 1px 10px rgba(0,0,0,.5)" id="annivLine">距四周年 222 天 · 共写下 86 篇日记</p>
+          </div>
+
+          <div class="chips" style="margin-top:16px">
+            <button class="chip glass" data-g="2" data-sheet="coins">
+              <span>金币余额</span>
+              <b>128<small>枚</small></b>
+              <span>本周消耗 12 枚</span>
+              <span class="ico">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.4" stroke="rgba(255,220,160,.75)" stroke-width="1.6"/><path d="M12 8v8M9.6 10.2h4.2a1.9 1.9 0 0 1 0 3.8H9.6" stroke="rgba(255,220,160,.75)" stroke-width="1.6" stroke-linecap="round"/></svg>
+              </span>
+            </button>
+            <button class="chip glass" data-g="3" data-sheet="todos">
+              <span>今日清单</span>
+              <b>3<small>/ 5</small></b>
+              <span>一起做完 60%</span>
+              <span class="ico">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.4" stroke="rgba(140,230,200,.6)" stroke-width="1.6"/><path d="M8.4 12.2l2.4 2.4 4.8-4.8" stroke="rgba(140,230,200,.6)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </span>
+            </button>
+          </div>
+
+          <button class="card glass" data-g="1" data-sheet="answer" style="margin-top:10px">
+            <div class="card__hd"><h2>今日一问</h2><span>连续 87 天</span></div>
+            <div class="qa__q">最近一次觉得「幸好有你」，是什么时候？</div>
+            <div class="qa__f">
+              <span class="btn btn--p">写下回答</span>
+              <span class="btn btn--g">看看 TA 的</span>
+            </div>
+          </button>
+
+          <div class="card glass" data-g="4" style="margin-top:10px;padding:16px 4px 8px">
+            <div class="card__hd" style="padding:0 12px"><h2>纪念日</h2><span>3 个</span></div>
+            <div class="rail">
+              <div class="ann ann--hot"><span>阿屿生日</span><b data-md="12-24">46</b><i>天后</i></div>
+              <div class="ann"><span>林深生日</span><b data-md="03-09">121</b><i>天后</i></div>
+              <div class="ann"><span>在一起</span><b>4</b><i>周年</i></div>
+            </div>
+          </div>
+
+          <div class="card glass" data-g="5" style="margin-top:10px">
+            <div class="card__hd"><h2>最近的日记</h2><span>86 篇</span></div>
+            <div class="rows">
+              <button class="row" data-sheet="diary">
+                <span class="row__ic ic-coral">日</span>
+                <span class="row__b"><span class="row__t">周六的早市，两只猫和一袋橘子</span><span class="row__m">阿屿 · 2 小时前</span></span>
+                <svg class="chev" width="7" height="12" viewBox="0 0 7 12" fill="none"><path d="M1 1l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <button class="row" data-sheet="diary">
+                <span class="row__ic ic-mint">日</span>
+                <span class="row__b"><span class="row__t">阳台上的薄荷，活过来了</span><span class="row__m">林深 · 昨天 21:40</span></span>
+                <svg class="chev" width="7" height="12" viewBox="0 0 7 12" fill="none"><path d="M1 1l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===================== 日记 ===================== -->
+        <section class="view" data-view="diary">
+          <div class="hd">
+            <div class="hd__k"><i></i><span>共同编辑 · 各自视角</span></div>
+            <h1>日记</h1>
+            <p>写的时候是你的，写完就是我们两个的了。</p>
+          </div>
+
+          <div class="card glass" data-g="1" style="padding:6px 16px">
+            <div class="rows">
+              <button class="row" data-sheet="diary">
+                <span class="row__ic ic-coral">日</span>
+                <span class="row__b"><span class="row__t">周六的早市，两只猫和一袋橘子</span><span class="row__m">阿屿 · 2 小时前 · <span class="tag">共同编辑</span></span></span>
+                <svg class="chev" width="7" height="12" viewBox="0 0 7 12" fill="none"><path d="M1 1l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <button class="row" data-sheet="diary">
+                <span class="row__ic ic-mint">日</span>
+                <span class="row__b"><span class="row__t">阳台上的薄荷，活过来了</span><span class="row__m">林深 · 昨天 21:40</span></span>
+                <svg class="chev" width="7" height="12" viewBox="0 0 7 12" fill="none"><path d="M1 1l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <button class="row" data-sheet="diary">
+                <span class="row__ic ic-lilac">日</span>
+                <span class="row__b"><span class="row__t">关于明年春天，我们吵了一次很好看的架</span><span class="row__m">共同 · 11月5日 · <span class="tag">共同编辑</span></span></span>
+                <svg class="chev" width="7" height="12" viewBox="0 0 7 12" fill="none"><path d="M1 1l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <button class="row" data-sheet="diary">
+                <span class="row__ic ic-gold">日</span>
+                <span class="row__b"><span class="row__t">他记得我不吃香菜，也记得我怕黑</span><span class="row__m">阿屿 · 11月2日</span></span>
+                <svg class="chev" width="7" height="12" viewBox="0 0 7 12" fill="none"><path d="M1 1l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <button class="row" data-sheet="diary">
+                <span class="row__ic ic-mint">日</span>
+                <span class="row__b"><span class="row__t">今年第一场雪，落在你下班那条路上</span><span class="row__m">林深 · 10月28日 · <span class="tag tag--mint">已配 3 张</span></span></span>
+                <svg class="chev" width="7" height="12" viewBox="0 0 7 12" fill="none"><path d="M1 1l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <button class="row" data-sheet="diary">
+                <span class="row__ic ic-slate">日</span>
+                <span class="row__b"><span class="row__t">关于「我们」这个词，我写了三页</span><span class="row__m">草稿 · 仅自己可见</span></span>
+                <svg class="chev" width="7" height="12" viewBox="0 0 7 12" fill="none"><path d="M1 1l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <button class="row" data-sheet="diary">
+                <span class="row__ic ic-coral">日</span>
+                <span class="row__b"><span class="row__t">把冰箱贴换成了旅行带回来的那枚</span><span class="row__m">阿屿 · 10月14日</span></span>
+                <svg class="chev" width="7" height="12" viewBox="0 0 7 12" fill="none"><path d="M1 1l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <button class="btn btn--w" data-sheet="diaryNew" style="margin-top:10px;background:rgba(255,255,255,.10);color:#fff">写一篇</button>
+        </section>
+
+        <!-- ===================== 秘密树 ===================== -->
+        <section class="view" data-view="tree">
+          <div class="hd">
+            <div class="hd__k"><i></i><span>阅后即焚 · 只属于一个人</span></div>
+            <h1>秘密树<em> · 8</em></h1>
+            <p>摘下来只能看一次。读过之后 24 小时，它会自己燃尽。</p>
+          </div>
+
+          <div class="card glass" data-g="1" style="padding:6px 8px 10px">
+            <svg class="tree" viewBox="0 0 320 300" preserveAspectRatio="xMidYMid meet" aria-label="秘密树">
+              <defs>
+                <linearGradient id="tg" x1="0" y1="1" x2="0" y2="0">
+                  <stop offset="0%" stop-color="#B5855C"/><stop offset="60%" stop-color="#CFA47A"/><stop offset="100%" stop-color="#9C7250"/>
+                </linearGradient>
+                <radialGradient id="lA" cx="34%" cy="28%"><stop offset="0%" stop-color="#B9F2E0"/><stop offset="100%" stop-color="#41BA98"/></radialGradient>
+                <radialGradient id="lB" cx="34%" cy="28%"><stop offset="0%" stop-color="#FFC6B2"/><stop offset="100%" stop-color="#F06B54"/></radialGradient>
+                <radialGradient id="lC" cx="34%" cy="28%"><stop offset="0%" stop-color="#D6CAFF"/><stop offset="100%" stop-color="#9680F2"/></radialGradient>
+                <radialGradient id="lD" cx="34%" cy="28%"><stop offset="0%" stop-color="#FFE5AB"/><stop offset="100%" stop-color="#EDAF38"/></radialGradient>
+                <g id="lf">
+                  <path d="M-11.6 0C-7.4-6.2 4.4-7.2 11.6 0 4.4 7.2-7.4 6.2-11.6 0Z"/>
+                  <path d="M-9.6 0C-3.6-.9 3.4-.9 9.2 0" fill="none" stroke="rgba(255,255,255,.42)" stroke-width=".72" stroke-linecap="round"/>
+                </g>
+              </defs>
+              <ellipse cx="160" cy="292" rx="52" ry="5" fill="#000" opacity=".28"/>
+              <path class="branch" stroke-width="7"   d="M160 292C161 268 157 246 159 224"/>
+              <path class="branch" stroke-width="5.2" d="M159 224C157 202 162 182 160 162"/>
+              <path class="branch" stroke-width="3.9" d="M160 162C159 144 161 128 160 112"/>
+              <path class="branch" stroke-width="3.6" d="M160 236C139 224 120 207 106 182"/>
+              <path class="branch" stroke-width="3"   d="M159 210C136 199 116 181 102 157"/>
+              <path class="branch" stroke-width="3.6" d="M160 224C182 213 201 195 216 169"/>
+              <path class="branch" stroke-width="3"   d="M160 194C184 183 201 168 213 146"/>
+              <path class="branch" stroke-width="2.7" d="M160 172C147 153 136 138 127 119"/>
+              <path class="branch" stroke-width="2.7" d="M160 168C175 149 186 134 194 115"/>
+
+              <g class="leaf" style="animation-delay:.7s,2.1s" data-sheet="secret">
+                <use href="#lf" transform="translate(104 182) rotate(-38)" fill="url(#lA)"/>
+                <use href="#lf" transform="translate(96 174) rotate(-64)" fill="url(#lA)"/>
+                <use href="#lf" transform="translate(113 174) rotate(-8)" fill="url(#lB)"/>
+                <use href="#lf" transform="translate(101 191) rotate(-18)" fill="url(#lC)"/>
+              </g>
+              <g class="leaf" style="animation-delay:.82s,3.3s" data-sheet="secret">
+                <use href="#lf" transform="translate(101 157) rotate(-52)" fill="url(#lA)"/>
+                <use href="#lf" transform="translate(93 148) rotate(-72)" fill="url(#lD)"/>
+                <use href="#lf" transform="translate(110 148) rotate(-22)" fill="url(#lA)"/>
+              </g>
+              <g class="leaf" style="animation-delay:.9s,2.6s" data-sheet="secret">
+                <use href="#lf" transform="translate(216 169) rotate(34)" fill="url(#lB)"/>
+                <use href="#lf" transform="translate(224 161) rotate(58)" fill="url(#lA)"/>
+                <use href="#lf" transform="translate(206 161) rotate(10)" fill="url(#lA)"/>
+                <use href="#lf" transform="translate(219 178) rotate(22)" fill="url(#lC)"/>
+              </g>
+              <g class="leaf" style="animation-delay:1s,4.2s" data-sheet="secret">
+                <use href="#lf" transform="translate(213 146) rotate(48)" fill="url(#lD)"/>
+                <use href="#lf" transform="translate(221 138) rotate(70)" fill="url(#lB)"/>
+                <use href="#lf" transform="translate(203 138) rotate(16)" fill="url(#lA)"/>
+              </g>
+              <g class="leaf" style="animation-delay:1.08s,3.8s" data-sheet="secret">
+                <use href="#lf" transform="translate(127 119) rotate(-46)" fill="url(#lC)"/>
+                <use href="#lf" transform="translate(119 110) rotate(-68)" fill="url(#lA)"/>
+                <use href="#lf" transform="translate(136 110) rotate(-14)" fill="url(#lD)"/>
+              </g>
+              <g class="leaf" style="animation-delay:1.16s,5.1s" data-sheet="secret">
+                <use href="#lf" transform="translate(194 115) rotate(42)" fill="url(#lB)"/>
+                <use href="#lf" transform="translate(201 107) rotate(66)" fill="url(#lC)"/>
+                <use href="#lf" transform="translate(185 107) rotate(12)" fill="url(#lA)"/>
+              </g>
+              <g class="leaf" style="animation-delay:1.24s,2.9s" data-sheet="secret">
+                <use href="#lf" transform="translate(160 112) rotate(-6)" fill="url(#lB)"/>
+                <use href="#lf" transform="translate(151 103) rotate(-34)" fill="url(#lD)"/>
+                <use href="#lf" transform="translate(169 103) rotate(24)" fill="url(#lA)"/>
+              </g>
+              <g class="leaf" style="animation-delay:1.32s,3.6s" data-sheet="secret">
+                <use href="#lf" transform="translate(121 205) rotate(-28)" fill="url(#lD)"/>
+                <use href="#lf" transform="translate(132 197) rotate(6)" fill="url(#lA)"/>
+                <use href="#lf" transform="translate(114 197) rotate(-56)" fill="url(#lB)"/>
+              </g>
+              <g class="leaf" style="animation-delay:1.4s,4.6s" data-sheet="secret">
+                <use href="#lf" transform="translate(199 192) rotate(24)" fill="url(#lA)"/>
+                <use href="#lf" transform="translate(210 185) rotate(52)" fill="url(#lC)"/>
+                <use href="#lf" transform="translate(190 183) rotate(-8)" fill="url(#lD)"/>
+              </g>
+              <g class="leaf" style="animation-delay:1.48s,2.4s" data-sheet="secret">
+                <use href="#lf" transform="translate(160 92) rotate(-8)" fill="url(#lA)"/>
+                <use href="#lf" transform="translate(148 84) rotate(-40)" fill="url(#lB)"/>
+                <use href="#lf" transform="translate(172 84) rotate(32)" fill="url(#lD)"/>
+                <use href="#lf" transform="translate(160 76) rotate(-2)" fill="url(#lC)"/>
+              </g>
+            </svg>
+            <button class="leafbtn" data-sheet="secretNew">＋ 藏一片叶子</button>
+          </div>
+
+          <div class="card glass" data-g="3" style="margin-top:10px;padding:14px 16px 6px">
+            <div class="card__hd"><h2>即将燃尽</h2><span>读后 24 小时</span></div>
+            <button class="ember" data-sheet="secret"><i></i><b>那句话，我其实记了很久</b><time>3:12</time></button>
+            <button class="ember" data-sheet="secret"><i></i><b>对不起，那天我不该说"随便"</b><time>7:44</time></button>
+            <button class="ember" data-sheet="secret"><i></i><b>想和你去看一次雪，认真看</b><time>18:05</time></button>
+          </div>
+        </section>
+
+        <!-- ===================== 我们 ===================== -->
+        <section class="view" data-view="me">
+          <div class="hd">
+            <div class="hd__k"><i></i><span>自 2023 年 6 月 18 日</span></div>
+            <h1>我们</h1>
+          </div>
+
+          <div class="chips">
+            <div class="chip glass" data-g="1" style="grid-column:span 2;min-height:118px;justify-content:center">
+              <div style="display:flex;align-items:center;margin-bottom:8px">
+                <span style="width:42px;height:42px;border-radius:50%;display:grid;place-items:center;font-size:15px;font-weight:600;background:linear-gradient(140deg,#FFB08A,#FF6F55);box-shadow:0 0 0 2px rgba(255,255,255,.18)">深</span>
+                <span style="width:42px;height:42px;border-radius:50%;display:grid;place-items:center;font-size:15px;font-weight:600;background:linear-gradient(140deg,#B9A6FF,#7C6CF0);margin-left:-13px;box-shadow:0 0 0 2px rgba(255,255,255,.18)">屿</span>
+                <span style="margin-left:10px;font-size:14px;font-weight:620">林深 &amp; 阿屿</span>
+              </div>
+              <span style="font-size:11px;color:var(--ink-3)">一起走过 <b id="meDays">1240</b> 天 · 86 篇日记 · 3 个纪念日</span>
+            </div>
+          </div>
+
+          <div class="card glass" data-g="2" style="margin-top:10px;padding:4px 16px">
+            <div class="rows">
+              <button class="row" data-sheet="coins"><span class="row__ic ic-gold">金</span><span class="row__b"><span class="row__t">金币</span></span><span class="row__v">128 枚</span><svg class="chev" width="7" height="12" viewBox="0 0 7 12" fill="none"><path d="M1 1l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+              <button class="row" data-sheet="bills"><span class="row__ic ic-mint">账</span><span class="row__b"><span class="row__t">账本</span></span><span class="row__v">本月 24 笔</span><svg class="chev" width="7" height="12" viewBox="0 0 7 12" fill="none"><path d="M1 1l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+              <button class="row" data-sheet="todos"><span class="row__ic ic-coral">清</span><span class="row__b"><span class="row__t">清单</span></span><span class="row__v">3 / 5</span><svg class="chev" width="7" height="12" viewBox="0 0 7 12" fill="none"><path d="M1 1l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+              <button class="row" data-sheet="mall"><span class="row__ic ic-lilac">店</span><span class="row__b"><span class="row__t">商城</span><span class="row__m">2 件待核销</span></span><span class="row__v">6 件</span><svg class="chev" width="7" height="12" viewBox="0 0 7 12" fill="none"><path d="M1 1l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            </div>
+          </div>
+
+          <div class="card glass" data-g="3" style="margin-top:10px;padding:4px 16px">
+            <div class="rows">
+              <button class="row" data-sheet="anniv"><span class="row__ic ic-coral">纪</span><span class="row__b"><span class="row__t">纪念日</span></span><span class="row__v">3 个</span><svg class="chev" width="7" height="12" viewBox="0 0 7 12" fill="none"><path d="M1 1l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+              <button class="row" data-sheet="simta"><span class="row__ic ic-lilac">TA</span><span class="row__b"><span class="row__t">模拟 TA</span><span class="row__m">已授权 · 忠实度 82%</span></span><span class="tag tag--mint">在用</span><svg class="chev" width="7" height="12" viewBox="0 0 7 12" fill="none"><path d="M1 1l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+              <button class="row" data-sheet="notif"><span class="row__ic ic-coral">信</span><span class="row__b"><span class="row__t">通知</span></span><span class="tag tag--hot">3 条未读</span><svg class="chev" width="7" height="12" viewBox="0 0 7 12" fill="none"><path d="M1 1l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+              <button class="row" data-sheet="settings"><span class="row__ic ic-slate">设</span><span class="row__b"><span class="row__t">设置</span><span class="row__m">账号 · 隐私 · 绑定</span></span><svg class="chev" width="7" height="12" viewBox="0 0 7 12" fill="none"><path d="M1 1l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            </div>
+          </div>
+
+          <p style="margin:18px 0 0;text-align:center;font-size:10.5px;color:rgba(255,255,255,.22);letter-spacing:.08em">Cove v0.9 · 慢慢来</p>
+        </section>
+
+        <nav class="tabs glass" id="tabs" aria-label="主导航">
+          <button class="tab on" data-tab="today">
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><path d="M4 10.4 12 4l8 6.4V19a1.6 1.6 0 0 1-1.6 1.6H5.6A1.6 1.6 0 0 1 4 19v-8.6Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M9.4 20.6v-6.2h5.2v6.2" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+            <span>今天</span>
+          </button>
+          <button class="tab" data-tab="diary">
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><path d="M5 5.2A1.6 1.6 0 0 1 6.6 3.6h11.8A1.6 1.6 0 0 1 20 5.2v13.6a1.6 1.6 0 0 1-1.6 1.6H6.6A1.6 1.6 0 0 1 5 18.8V5.2Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M5 8.6h5.2v10.8H5M14 8.6h2.6M14 12.4h2.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+            <span>日记</span>
+          </button>
+          <button class="tab" data-tab="tree">
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><path d="M12 20.5v-4.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M12 16.3c0-3.4-3.6-4.4-5.6-6.6C4.6 7.8 6 4 9.2 3.9c1.2 0 2.2.5 2.8 1.4.6-.9 1.6-1.4 2.8-1.4 3.2.1 4.6 3.9 2.8 5.8-2 2.2-5.6 3.2-5.6 6.6Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+            <span>秘密树</span>
+          </button>
+          <button class="tab" data-tab="me">
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8.4" r="3.8" stroke="currentColor" stroke-width="1.7"/><path d="M4.8 20.2c0-3.4 3.2-5.6 7.2-5.6s7.2 2.2 7.2 5.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+            <span>我们</span>
+          </button>
+        </nav>
+
+        <div class="topscrim"></div>
+        <div class="scrim" id="scrim"></div>
+
+        <div class="sheet glass" id="sheet">
+          <div class="sheet__in">
+            <div class="sheet__grab"></div>
+            <div class="sheet__scroll" id="sheetBody"></div>
+          </div>
+        </div>
+
+        <!-- ===================== 首次进入 ===================== -->
+        <div class="welcome" id="welcome" hidden>
+          <div class="welcome__top">
+            <div class="wmark">
+              <svg viewBox="0 0 60 32" fill="none" aria-hidden="true">
+                <path d="M2 21c6.4 0 8.6-13 15-13s8.6 13 15 13 8.6-13 15-13 6.4 13 11 13" stroke="url(#wg1)" stroke-width="3.4" stroke-linecap="round"/>
+                <path d="M2 28.5c6.4 0 8.6-6 15-6s8.6 6 15 6 8.6-6 15-6 6.4 6 11 6" stroke="url(#wg2)" stroke-width="2.2" stroke-linecap="round" opacity=".55"/>
+                <defs>
+                  <linearGradient id="wg1" x1="2" y1="8" x2="58" y2="21" gradientUnits="userSpaceOnUse"><stop stop-color="#FFB58C"/><stop offset=".52" stop-color="#FF8D74"/><stop offset="1" stop-color="#C79BFF"/></linearGradient>
+                  <linearGradient id="wg2" x1="2" y1="28" x2="58" y2="22" gradientUnits="userSpaceOnUse"><stop stop-color="#FFC7A8"/><stop offset="1" stop-color="#9E8CF5"/></linearGradient>
+                </defs>
+              </svg>
+              <b>Cove</b>
+            </div>
+            <p class="wtag">两个人的地方。<br>写下来的都会留下，说不出口的可以藏进树里。</p>
+          </div>
+
+          <div class="wstep" id="wStep1">
+            <div class="wbadge"><i></i>仅限两个人</div>
+            <label class="wlabel">手机号</label>
+            <div class="wfield"><span>+86</span><input id="wPhone" inputmode="numeric" autocomplete="tel" maxlength="11" placeholder="138 0000 0000" /></div>
+            <button class="wbtn" id="wNext">获取验证码</button>
+            <button class="wlink" id="wInvite">我有 TA 的邀请码</button>
+          </div>
+
+          <div class="wstep" id="wStep2" hidden>
+            <label class="wlabel">验证码</label>
+            <div class="wcode" id="wCode">
+              <input inputmode="numeric" maxlength="1" /><input inputmode="numeric" maxlength="1" /><input inputmode="numeric" maxlength="1" /><input inputmode="numeric" maxlength="1" />
+            </div>
+            <button class="wbtn" id="wGo">进入 Cove</button>
+            <button class="wlink" id="wBack">换一个号码 · 已发送至 138****6021</button>
+          </div>
+
+          <div class="wstep" id="wStep3" hidden>
+            <label class="wlabel">邀请码</label>
+            <div class="wfield"><input id="wCodeIn" maxlength="12" placeholder="COVE-8F2K" style="letter-spacing:.18em;font-size:15px" /></div>
+            <button class="wbtn" id="wBind">和 TA 绑在一起</button>
+            <button class="wlink" id="wBack2">先自己看看</button>
+          </div>
+
+          <p class="wlegal">继续即表示同意 <u>用户协议</u> 与 <u>隐私政策</u><br>秘密读后 24 小时燃尽 · 账本只做共同视角汇总</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="hint" id="hint">向上滑开面板 · 玻璃会从底栏长出来</div>
+<pre class="dbg" id="dbg"></pre>
+<pre class="err" id="err"></pre>
+
+<script>
+"use strict";
+/* Cove · liquid glass
+   Pass1 程序化海湾夜景 → FBO；Pass2 SDF 玻璃 + 双界面折射采样 FBO */
+
+const canvas = document.getElementById('gl');
+const screenEl = document.getElementById('screen');
+const phoneEl = document.getElementById('phone');
+const dbgEl = document.getElementById('dbg');
+const errEl = document.getElementById('err');
+const DEBUG = location.search.includes('debug');
+const STATIC = location.search.includes('static');
+function fail(m){ errEl.textContent = m; errEl.classList.add('on'); document.body.classList.add('no-gl'); }
+
+const VS = `attribute vec2 aPos; void main(){ gl_Position = vec4(aPos,0.0,1.0); }`;
+
+/* ---------------- 背景 ---------------- */
+const FS_BG = `
+precision highp float;
+uniform vec2  uRes;
+uniform vec2  uCss;
+uniform float uTime;
+uniform float uPulse;
+uniform float uBright;
+
+float hash(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
+float noise(vec2 p){
+  vec2 i=floor(p), f=fract(p); vec2 u=f*f*(3.0-2.0*f);
+  float a=hash(i),b=hash(i+vec2(1.,0.)),c=hash(i+vec2(0.,1.)),d=hash(i+vec2(1.,1.));
+  return mix(mix(a,b,u.x),mix(c,d,u.x),u.y);
+}
+float fbm(vec2 p){ float v=0.,a=.5; for(int i=0;i<3;i++){ v+=a*noise(p); p=p*2.05+7.3; a*=.5; } return v; }
+mat2 rot(float a){ float c=cos(a),s=sin(a); return mat2(c,-s,s,c); }
+
+void main(){
+  vec2 uv = gl_FragCoord.xy/uRes;
+  vec2 p  = (uv-0.5)*vec2(uCss.x/uCss.y,1.0);
+  float t = uTime;
+
+  vec2 q = rot(0.06)*p;
+  q += 0.022*vec2(fbm(q*1.5+t*0.03), fbm(q*1.5+4.0-t*0.025));
+
+  vec3 col = mix(vec3(0.010,0.014,0.026), vec3(0.040,0.056,0.098), smoothstep(-0.60,0.70,q.y));
+
+  // 月亮
+  float dM = length(q - vec2(0.24,0.34));
+  col += vec3(1.0,0.95,0.86) * smoothstep(0.060,0.044,dM) * 0.86;
+  col += vec3(1.0,0.90,0.78) * exp(-dM*7.5) * 0.17;
+  col += vec3(0.72,0.80,1.0) * exp(-dM*2.4) * 0.045;
+
+  // 气团：暖 / 靛 / 薄荷
+  float e = smoothstep(0.62,0.0,length(q-vec2(-0.30,-0.02)));
+  col += mix(vec3(1.0,0.30,0.13), vec3(1.0,0.60,0.24), smoothstep(0.0,0.45,e))*e*0.66;
+  float i2 = smoothstep(0.70,0.0,length(q-vec2(0.34,0.14)));
+  col += vec3(0.24,0.30,0.92)*i2*0.62;
+  float m = smoothstep(0.40,0.0,length(q-vec2(-0.06,0.46)));
+  col += vec3(0.10,0.72,0.62)*m*0.24;
+
+  // 水面涟漪
+  vec2 wp = q - vec2(0.20,-0.34);
+  wp.y *= 2.8;
+  float wr = length(wp);
+  float rip = sin(wr*128.0 - t*0.9 + fbm(vec2(q.x*3.0, q.y*6.0))*1.6);
+  rip = smoothstep(0.52,1.0,rip);
+  float water = smoothstep(-0.02,-0.30,q.y) * smoothstep(1.10,0.05,wr);
+  col += vec3(0.92,0.96,1.0) * rip * water * 0.14;
+  col += vec3(0.55,0.72,1.0) * water * 0.05;
+
+  // 星尘
+  vec2 gp = uv*vec2(uCss.x/uCss.y,1.0)*96.0;
+  vec2 gi = floor(gp), gf = fract(gp);
+  float hh = hash(gi);
+  vec2 sp = vec2(hash(gi+11.1), hash(gi+27.7));
+  float star = smoothstep(0.10,0.0,length(gf-sp)) * step(0.982,hh) * smoothstep(0.0,-0.1,q.y);
+  col += vec3(1.0,0.96,0.92)*star*0.9;
+
+  col += vec3(1.0,0.62,0.34)*uPulse*0.05*smoothstep(0.6,0.0,length(q-vec2(0.0,0.2)));
+
+  col *= 1.0 - 0.30*pow(clamp(length(p)-0.24,0.0,1.0),1.35);
+  col += (hash(uv*uRes*0.71)-0.5)*0.014;
+
+  gl_FragColor = vec4(col*uBright,1.0);
+}
+`;
+
+/* ---------------- 玻璃 ---------------- */
+const FS_GLASS = `
+#extension GL_OES_standard_derivatives : enable
+precision highp float;
+
+uniform sampler2D uBg;
+uniform vec2  uRes;
+uniform float uDpr;
+uniform vec2  uCss;
+uniform float uTime;
+
+uniform vec4  uRect[8];
+uniform float uRad[8];
+uniform float uMerge;
+uniform float uThick;
+uniform float uDisp;
+uniform float uFrost;
+uniform float uForm;
+uniform float uPress;
+uniform float uScrim;      // 面板打开时对底层的压暗量
+uniform float uTabA;       // 标签栏玻璃的残留量
+uniform float uViewA;      // 卡片玻璃的残留量（面板升起时归零）
+uniform vec3  uLight;
+
+float sdRound(vec2 p, vec2 c, vec2 b, float r){
+  vec2 q = abs(p-c) - b + vec2(r);
+  return length(max(q,0.0)) + min(max(q.x,q.y),0.0) - r;
+}
+float smin(float a,float b,float k){
+  float h = clamp(0.5+0.5*(b-a)/k,0.0,1.0);
+  return mix(b,a,h) - k*h*(1.0-h);
+}
+vec2 centerOf(vec4 r){ return vec2(r.x+r.z*0.5, uCss.y-r.y-r.w*0.5); }
+vec2 halfOf(vec4 r){ return vec2(r.z,r.w)*0.5; }
+
+float heightOf(float d, float edge){
+  float u = clamp(-d/edge, 0.0, 1.0);
+  return pow(smoothstep(0.0,1.0,u), 0.55);
+}
+vec2 bend(vec3 N, vec3 I, float ior){
+  vec3 T1 = refract(I, N, 1.0/ior);
+  vec3 T2 = refract(T1, -N, ior);
+  if (dot(T2,T2) < 1e-5) T2 = T1;
+  return T1.xy/max(0.22,-T1.z) + T2.xy/max(0.22,-T2.z);
+}
+vec3 sampleBg(vec2 p){ return texture2D(uBg, clamp(p/uCss, vec2(0.002), vec2(0.998))).rgb; }
+
+void main(){
+  vec2 p = gl_FragCoord.xy/uDpr;
+  vec3 col = sampleBg(p);
+
+  // 投影：卡片(k=1..5)和常驻件(k=0/6/7)分开算，面板升起时卡片的投影一起退场，
+  // 否则底下的内容已经透明了，还会留一圈"幽灵"阴影
+  float dCard = 1e9, dMain = 1e9;
+  for (int i=0;i<8;i++){
+    if (uRect[i].z < 1.0) continue;
+    float dd = sdRound(p, centerOf(uRect[i]), halfOf(uRect[i]), uRad[i]);
+    if (i >= 1 && i <= 5) dCard = min(dCard, dd);
+    else                  dMain = min(dMain, dd);
+  }
+  float dSh = min(dMain, mix(dCard, 1e9, 1.0-uViewA));
+  float sh = 1.0 - smoothstep(-2.0, 30.0, max(dSh,0.0));
+  float sh2 = 1.0 - smoothstep(-2.0, 86.0, max(dSh,0.0));
+  col *= 1.0 - 0.42*sh*sh - 0.16*sh2;
+
+  for (int k=0;k<8;k++){
+    if (uRect[k].z < 1.0) continue;
+
+    // 面板升起时：先把已经画好的卡片玻璃整体压暗，再让面板重新折射
+    // （渲染顺序：背景 → 卡片 → 压暗层 → 面板 → 高光，避免"半透明白底"的塑料感）
+    if (k==6 && uScrim > 0.001){
+      float dS  = sdRound(p, centerOf(uRect[6]), halfOf(uRect[6]), uRad[6]);
+      float outm = smoothstep(-6.0, 78.0, dS);
+      col = mix(col, col*vec3(0.24,0.26,0.32), uScrim*(0.30+0.54*outm));
+      col += vec3(0.008,0.010,0.018)*uScrim*(1.0-outm)*0.55;
+    }
+
+    float d = sdRound(p, centerOf(uRect[k]), halfOf(uRect[k]), uRad[k]);
+    if (k==6 && uMerge > 0.001){
+      float dTab = sdRound(p, centerOf(uRect[7]), halfOf(uRect[7]), uRad[7]);
+      d = smin(d, dTab, uMerge*38.0);
+    }
+    if (k==7 && uMerge > 0.001) continue;
+    if (d > 3.0) continue;
+
+    float cov = 1.0 - smoothstep(-1.1, 1.1, d);
+    if (k==7) cov *= uTabA;
+    if (k>=1 && k<=5) cov *= uViewA;
+    if (cov <= 0.001) continue;
+
+    float edge = clamp(min(uRect[k].z,uRect[k].w)*0.16, 9.0, 30.0);
+    float h = heightOf(d, edge);
+    float dm = max(-d/edge, 0.0);
+    float wOuter  = 1.0 - smoothstep(0.0,0.13,dm);
+    float wInner  = smoothstep(0.05,0.28,dm)*(1.0-smoothstep(0.30,0.55,dm));
+    float wCenter = smoothstep(0.42,0.85,dm);
+    float zone = wOuter*0.45 + wInner*1.0 + wCenter*0.16;
+
+    vec2 dh = vec2(dFdx(h), dFdy(h))*uDpr;
+    float thick = uThick*(1.0+uPress*0.5);
+    vec3 N = normalize(vec3(-dh*thick, 1.0));
+    vec3 I = normalize(vec3((p-uCss*0.5)*0.0011, -1.0));
+
+    float path = h*thick;
+    float disp = uDisp*zone*uForm;
+    vec2 offG = bend(N,I,1.505)*path*disp;
+    vec3 rc;
+    rc.r = sampleBg(p + bend(N,I,1.442)*path*disp).r;
+    rc.g = sampleBg(p + offG).g;
+    rc.b = sampleBg(p + bend(N,I,1.585)*path*disp).b;
+
+    if (uFrost > 0.01 || k==7){
+      // 底栏压在滚动内容上，需要更强的磨砂才能保证图标可读；
+      // 面板保持低磨砂，让"看得见背景被掰弯"这件事成立
+      float fr = k==7 ? 0.62 : uFrost;
+      vec2 r2 = vec2(1.9);
+      vec3 bl = sampleBg(p+offG+vec2(r2.x,0.0)) + sampleBg(p+offG-vec2(r2.x,0.0))
+              + sampleBg(p+offG+vec2(0.0,r2.y)) + sampleBg(p+offG-vec2(0.0,r2.y));
+      bl += sampleBg(p+offG+vec2(r2.x,r2.y)) + sampleBg(p+offG-vec2(r2.x,r2.y))
+          + sampleBg(p+offG+vec2(r2.x,-r2.y)) + sampleBg(p+offG-vec2(r2.x,-r2.y));
+      rc = mix(rc, bl*0.125, fr*(1.0-wOuter*0.75));
+    }
+
+    vec3 absorb = exp(-vec3(0.0013,0.0017,0.0026)*path*3.0);
+    vec3 body = rc*absorb;
+    float lum = dot(body, vec3(0.2126,0.7152,0.0722));
+    body = mix(body, vec3(lum), 0.30);
+    body = body*0.66 + vec3(0.088,0.092,0.104);
+    body = mix(body, body*vec3(0.93,0.975,1.08), 0.62);
+    if (k==7) body *= 0.74;
+
+    float pxIn = max(-d,0.0);
+    vec2 nl = normalize(N.xy + vec2(1e-5));
+    float side = 0.16 + 0.84*smoothstep(-0.9,0.95,dot(nl, normalize(uLight.xy)));
+
+    float dark = exp(-pow((pxIn-3.6)/2.6,2.0));
+    body *= 1.0 - dark*0.42*(1.0-side*0.78);
+
+    float line = exp(-pow((pxIn-1.0)/1.25,2.0));
+    float varr = 0.30 + 0.70*(0.5+0.5*sin(dot(p,vec2(0.031,0.067))+uTime*0.5));
+    body += vec3(1.0,0.97,0.92)*line*pow(side,1.35)*varr*1.05;
+
+    vec3 Hv = normalize(vec3(uLight.xy,uLight.z)+vec3(0.0,0.0,1.0));
+    body += vec3(1.0) * pow(max(dot(N,Hv),0.0),150.0)*2.2;
+    body += vec3(0.84,0.90,1.0) * pow(1.0-clamp(N.z,0.0,1.0),3.0) * 0.14;
+
+    col = mix(col, body, cov);
+  }
+
+  gl_FragColor = vec4(col,1.0);
+}
+`;
+
+/* ---------------- WebGL ---------------- */
+const gl = canvas.getContext('webgl',{antialias:false,alpha:false,depth:false,stencil:false,powerPreference:'high-performance'});
+if (gl) gl.getExtension('OES_standard_derivatives');
+
+function compile(t,s){
+  const o = gl.createShader(t); gl.shaderSource(o,s); gl.compileShader(o);
+  if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o));
+  return o;
+}
+function program(vs,fs){
+  const p = gl.createProgram();
+  gl.attachShader(p, compile(gl.VERTEX_SHADER,vs));
+  gl.attachShader(p, compile(gl.FRAGMENT_SHADER,fs));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  return p;
+}
+
+let progBG, progGlass, quad, bgTex, fbo;
+const U = { bg:{}, gs:{} };
+
+if (gl){
+  try{
+    progBG = program(VS, FS_BG);
+    progGlass = program(VS, FS_GLASS);
+    quad = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,1,1]), gl.STATIC_DRAW);
+    bgTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, bgTex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    fbo = gl.createFramebuffer();
+    ['uRes','uCss','uTime','uPulse','uBright'].forEach(n => U.bg[n] = gl.getUniformLocation(progBG,n));
+    ['uBg','uRes','uDpr','uCss','uTime','uMerge','uThick','uDisp','uFrost','uForm','uPress','uScrim','uTabA','uViewA','uLight']
+      .forEach(n => U.gs[n] = gl.getUniformLocation(progGlass,n));
+    for (let i=0;i<8;i++){
+      U.gs['r'+i] = gl.getUniformLocation(progGlass, 'uRect['+i+']');
+      U.gs['a'+i] = gl.getUniformLocation(progGlass, 'uRad['+i+']');
+    }
+    U.aBG = gl.getAttribLocation(progBG,'aPos');
+    U.aGL = gl.getAttribLocation(progGlass,'aPos');
+  } catch(e){ fail('着色器编译失败，已切到 CSS 兜底\n' + e.message); }
+} else fail('当前浏览器不支持 WebGL，已切到 CSS 兜底');
+
+/* ---------------- 状态 ---------------- */
+const S = { W:390, H:844, dpr:1 };
+const state = {
+  t:0, form:0, press:0, pulse:0,
+  lx:-0.45, ly:0.72, lvx:0, lvy:0,
+  sheet:0, sheetT:0, sheetVel:0, openH:0, cur:null, view:'today'
+};
+const rects = Array.from({length:8}, () => ({x:0,y:0,w:0,h:0,r:0}));
+
+const capEl = document.getElementById('cap');
+const tabsEl = document.getElementById('tabs');
+const sheetEl = document.getElementById('sheet');
+const sheetBody = document.getElementById('sheetBody');
+const scrimEl = document.getElementById('scrim');
+const views = [...document.querySelectorAll('.view')];
+const tabBtns = [...document.querySelectorAll('.tab')];
+// 滚动内容在顶栏/底栏下方溶解（写在样式表里会被部分浏览器丢弃，这里直接落到内联样式）
+const VIEW_MASK = 'linear-gradient(180deg,transparent 46px,#000 136px,#000 calc(100% - 152px),transparent calc(100% - 74px))';
+views.forEach(v => { v.style.webkitMaskImage = VIEW_MASK; v.style.maskImage = VIEW_MASK; });
+
+const clamp = (v,a,b) => v<a?a:v>b?b:v;
+const lerp = (a,b,t) => a+(b-a)*t;
+const smoothstep = (a,b,x) => { const t = clamp((x-a)/(b-a),0,1); return t*t*(3-2*t); };
+
+/* ---------------- 布局 ---------------- */
+function measure(){
+  const r = screenEl.getBoundingClientRect();
+  S.W = r.width; S.H = r.height;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.round(S.W*dpr), h = Math.round(S.H*dpr);
+  if (canvas.width !== w || canvas.height !== h){
+    canvas.width = w; canvas.height = h;
+    if (gl && bgTex){
+      gl.bindTexture(gl.TEXTURE_2D, bgTex);
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, bgTex, 0);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    }
+  }
+  S.dpr = canvas.width / S.W;
+  layoutStatic();
+}
+
+function rectOf(el){
+  const r = el.getBoundingClientRect();
+  const s = screenEl.getBoundingClientRect();
+  return { x:r.left-s.left, y:r.top-s.top, w:r.width, h:r.height };
+}
+
+function layoutStatic(){
+  const c = rectOf(capEl);
+  rects[0] = { x:c.x, y:c.y, w:c.w, h:c.h, r:25 };
+
+  const t = rectOf(tabsEl);
+  rects[7] = { x:t.x, y:t.y, w:t.w, h:t.h, r:28 };
+
+  for (let i=1;i<=5;i++) rects[i] = {x:0,y:0,w:0,h:0,r:22};
+  const v = document.querySelector('.view.on');
+  if (v){
+    v.querySelectorAll('[data-g]').forEach(el => {
+      const i = +el.dataset.g;
+      if (i < 1 || i > 5) return;
+      const r = rectOf(el);
+      if (r.h < 2) return;
+      rects[i] = { x:r.x, y:r.y, w:r.w, h:r.h, r:22 };
+    });
+  }
+  updateSheet();
+}
+
+function updateSheet(){
+  const s = state.sheet;
+  const tab = rects[7];
+  const openH = state.openH || Math.min(S.H*0.72, 640);
+  const openY = S.H - openH - 24;
+  const e = clamp(s, -0.06, 1.08);
+  rects[6] = {
+    x: lerp(tab.x, S.W*0.041, e),
+    y: lerp(tab.y, openY, e),
+    w: lerp(tab.w, S.W*0.918, e),
+    h: lerp(tab.h, openH, e),
+    r: lerp(28, 30, e)
+  };
+  // 收起时让位给标签栏本体，避免两块完全重合的玻璃叠出双倍描边
+  if (s < 0.015) rects[6] = { x:0, y:0, w:0, h:0, r:0 };
+
+  const r = rects[6];
+  sheetEl.style.left = r.x+'px';
+  sheetEl.style.top = r.y+'px';
+  sheetEl.style.width = r.w+'px';
+  sheetEl.style.height = r.h+'px';
+  sheetEl.style.borderRadius = r.r+'px';
+  sheetEl.style.opacity = s > 0.05 ? String(smoothstep(0.05,0.5,s)) : '0';
+  sheetEl.style.pointerEvents = s > 0.6 ? 'auto' : 'none';
+
+  tabsEl.style.opacity = String(1 - smoothstep(0,0.32,s));
+  tabsEl.style.pointerEvents = s > 0.3 ? 'none' : 'auto';
+
+  // 底层内容让位：文字先退，玻璃由压暗层接管
+  const vo = 1 - smoothstep(0.02,0.30,s);
+  views.forEach(v => {
+    const on = v.classList.contains('on');
+    v.style.opacity = vo < 0.999 ? String(on ? vo : 0) : (on ? '' : '0');
+    v.style.pointerEvents = on && vo > 0.6 ? '' : 'none';
+  });
+
+  scrimEl.style.pointerEvents = s > 0.7 ? 'auto' : 'none';
+
+  capEl.style.opacity = s > 0.02 ? String(1 - 0.30*smoothstep(0,0.55,s)) : '';
+  capEl.style.pointerEvents = s > 0.5 ? 'none' : '';
+}
+
+/* ---------------- 面板内容 ---------------- */
+const SHEETS = {
+  coins(){ return `
+    <h3>金币</h3>
+    <div class="sub">金币是消耗品，不是货币。花掉就没了，所以每一次都算数。</div>
+    <div class="bal"><b>128</b><span>枚 · 本周消耗 12 枚</span></div>
+    <div class="kv"><div><div class="kv__l">写了一篇日记</div><div class="kv__t">今天 09:12</div></div><div class="kv__v plus">＋5</div></div>
+    <div class="kv"><div><div class="kv__l">兑换 · 一起看电影</div><div class="kv__t">11月6日</div></div><div class="kv__v minus">−30</div></div>
+    <div class="kv"><div><div class="kv__l">阿屿赠予</div><div class="kv__t">11月3日 · 赠与 = 系统发行</div></div><div class="kv__v plus">＋20</div></div>
+    <div class="kv"><div><div class="kv__l">申请：买一束花</div><div class="kv__t">11月1日 · 等 TA 审批</div></div><div class="kv__v">10 枚</div></div>
+    <div class="cta"><button class="btn btn--g" data-close>发起申请</button><button class="btn btn--p" data-close>赠予 TA</button></div>` },
+  todos(){ return `
+    <h3>清单</h3>
+    <div class="sub">共同清单两个人都能勾；单人清单只有自己能看见。完成之后会生成一张纪念卡。</div>
+    <div class="kv"><div><div class="kv__l">一起去早市</div><div class="kv__t">共同 · 今天</div></div><div class="kv__v" style="color:var(--mint)">已完成</div></div>
+    <div class="kv"><div><div class="kv__l">给阳台的薄荷换盆</div><div class="kv__t">共同 · 今天</div></div><div class="kv__v" style="color:var(--mint)">已完成</div></div>
+    <div class="kv"><div><div class="kv__l">订周五的电影票</div><div class="kv__t">共同 · 今天</div></div><div class="kv__v" style="color:var(--mint)">已完成</div></div>
+    <div class="kv"><div><div class="kv__l">把冬天的被子晒一晒</div><div class="kv__t">共同 · 明天</div></div><div class="kv__v" style="color:var(--ink-3)">待完成</div></div>
+    <div class="kv"><div><div class="kv__l">写一封手写信</div><div class="kv__t">单人 · 只有自己可见</div></div><div class="kv__v" style="color:var(--ink-3)">待完成</div></div>
+    <div class="cta"><button class="btn btn--p" data-close>添加一件小事</button></div>` },
+  bills(){ return `
+    <h3>账本</h3>
+    <div class="sub">记的是付出，不是钱。只输出共同视角的汇总，永远不做个人对比。</div>
+    <div class="bal" style="background:linear-gradient(140deg,rgba(95,211,176,.18),rgba(95,211,176,.05))">
+      <div><div style="font-size:11.5px;color:var(--ink-2)">本月共同支出</div><b style="font-size:30px">¥ 2,480</b></div>
+    </div>
+    <div class="kv"><div><div class="kv__l">金钱付出</div><div class="kv__t">24 笔 · 已合并展示</div></div><div class="kv__v">¥ 2,480</div></div>
+    <div class="kv"><div><div class="kv__l">非金钱付出</div><div class="kv__t">做饭 8 次 · 接送 5 次 · 陪伴 12 次</div></div><div class="kv__v">18 次</div></div>
+    <div class="kv"><div><div class="kv__l">隐私记录</div><div class="kv__t">仅自己可见 · 3 笔</div></div><div class="kv__v">已隐藏</div></div>
+    <div class="cta"><button class="btn btn--g" data-close>关闭</button><button class="btn btn--p" data-close>记一笔</button></div>` },
+  mall(){ return `
+    <h3>商城</h3>
+    <div class="sub">用金币兑换的小事。TA 上架，你来买；核销之后才算完成。</div>
+    <div class="kv"><div><div class="kv__l">一起看一场电影</div><div class="kv__t">阿屿上架 · 待核销</div></div><div class="kv__v">30 枚</div></div>
+    <div class="kv"><div><div class="kv__l">承包一周的早饭</div><div class="kv__t">林深上架 · 等审批上架</div></div><div class="kv__v">45 枚</div></div>
+    <div class="kv"><div><div class="kv__l">一次说走就走的散步</div><div class="kv__t">已核销 · 11月2日</div></div><div class="kv__v" style="color:var(--mint)">已完成</div></div>
+    <div class="cta"><button class="btn btn--g" data-close>上架新商品</button><button class="btn btn--p" data-close>去核销</button></div>` },
+  anniv(){ return `
+    <h3>纪念日</h3>
+    <div class="sub">在一起、双方生日，还有你们自己定义的那些日子。</div>
+    <div class="kv"><div><div class="kv__l">在一起</div><div class="kv__t">2023.06.18 · 已 1240 天</div></div><div class="kv__v">四周年</div></div>
+    <div class="kv"><div><div class="kv__l">阿屿生日</div><div class="kv__t">12月24日</div></div><div class="kv__v" style="color:var(--coral)">46 天</div></div>
+    <div class="kv"><div><div class="kv__l">林深生日</div><div class="kv__t">03月09日</div></div><div class="kv__v">121 天</div></div>
+    <div class="kv"><div><div class="kv__l">第一次一起旅行</div><div class="kv__t">10月02日 · 自定义</div></div><div class="kv__v">328 天</div></div>
+    <div class="cta"><button class="btn btn--p" data-close>添加纪念日</button></div>` },
+  simta(){ return `
+    <h3>模拟 TA</h3>
+    <div class="sub">必须先拿到对方授权。撤销授权即停用；理想化模式不允许替 TA 做承诺。</div>
+    <div class="kv"><div><div class="kv__l">授权状态</div><div class="kv__t">阿屿在 11月3日 授权</div></div><div class="kv__v" style="color:var(--mint)">生效中</div></div>
+    <div class="kv"><div><div class="kv__l">忠实度</div><div class="kv__t">基于 86 篇日记 · 1,204 条聊天</div></div><div class="kv__v">82%</div></div>
+    <div style="margin:16px 0 10px;font-size:10px;color:var(--ink-3);letter-spacing:.14em">对话</div>
+    <div class="bubble bubble--ta">今天早市买了橘子，很酸，你肯定喜欢。</div>
+    <div class="bubble bubble--me">你怎么知道我在想橘子</div>
+    <div class="bubble bubble--ta">因为你每次心情不好，都会说想吃酸的。</div>
+    <div class="cta"><button class="btn btn--g" data-close>撤销授权</button><button class="btn btn--p" data-close>继续聊</button></div>` },
+  notif(){ return `
+    <h3>通知</h3>
+    <div class="sub">三件事在等你。</div>
+    <div class="kv"><div><div class="kv__l">阿屿 回复了今日一问</div><div class="kv__t">10 分钟前</div></div><div class="kv__v" style="color:var(--coral)">未读</div></div>
+    <div class="kv"><div><div class="kv__l">一片叶子将在 3 小时后燃尽</div><div class="kv__t">1 小时前</div></div><div class="kv__v" style="color:var(--coral)">未读</div></div>
+    <div class="kv"><div><div class="kv__l">金币申请待你审批</div><div class="kv__t">买一束花 · 10 枚 · 昨天</div></div><div class="kv__v" style="color:var(--coral)">未读</div></div>
+    <div class="kv"><div><div class="kv__l">清单「订周五的电影票」已完成</div><div class="kv__t">昨天 20:12</div></div><div class="kv__v">已读</div></div>
+    <div class="cta"><button class="btn btn--p" data-close>全部标为已读</button></div>` },
+  settings(){ return `
+    <h3>设置</h3>
+    <div class="sub">账号、隐私、绑定关系都在这里。</div>
+    <div class="kv"><div><div class="kv__l">手机号</div><div class="kv__t">138****6021 · 用于登录</div></div><div class="kv__v">已绑定</div></div>
+    <div class="kv"><div><div class="kv__l">登录与安全</div><div class="kv__t">修改密码 · 退出登录 · 30 分钟令牌</div></div><div class="kv__v">进入</div></div>
+    <div class="kv"><div><div class="kv__l">邀请码</div><div class="kv__t">COVE-8F2K · 给 TA 的那个</div></div><div class="kv__v">复制</div></div>
+    <div class="kv"><div><div class="kv__l">导出我的数据</div><div class="kv__t">日记、清单、账本打包下载</div></div><div class="kv__v">导出</div></div>
+    <div class="kv"><div><div class="kv__l">操作记录</div><div class="kv__t">销毁秘密、解绑、授权撤销</div></div><div class="kv__v">12 条</div></div>
+    <div class="kv"><div><div class="kv__l" style="color:var(--coral)">解除绑定</div><div class="kv__t">共同记录转为只读，不会删除</div></div><div class="kv__v" style="color:var(--coral)">解绑</div></div>
+    <div class="kv"><div><div class="kv__l" style="color:var(--coral)">注销账号</div><div class="kv__t">不可恢复，私密内容一并删除</div></div><div class="kv__v" style="color:var(--coral)">注销</div></div>
+    <div class="cta"><button class="btn btn--g" data-close>关闭</button><button class="btn btn--p" data-close>完成</button></div>` },
+  answer(){ return `
+    <h3>今日一问</h3>
+    <div class="sub">两个人各自写，都写完才能互相看见。没有标准答案，写得慢一点也没关系。</div>
+    <div class="bal" style="display:block;background:rgba(255,255,255,.06)">
+      <div style="font-size:15px;line-height:1.6;font-weight:560">最近一次觉得「幸好有你」，是什么时候？</div>
+    </div>
+    <div class="field"><label>我的回答</label><input placeholder="写在这里，TA 写完之前看不到" /></div>
+    <div class="kv"><div><div class="kv__l">连续回答</div><div class="kv__t">断了会从 1 开始</div></div><div class="kv__v">87 天</div></div>
+    <div class="kv"><div><div class="kv__l">TA 的回答</div><div class="kv__t">两边都写完才解锁</div></div><div class="kv__v" style="color:var(--ink-3)">未解锁</div></div>
+    <div class="cta"><button class="btn btn--g" data-close>稍后</button><button class="btn btn--p" data-close>提交</button></div>` },
+  secret(){ return `
+    <h3>一片叶子</h3>
+    <div class="sub">摘下来只能看一次。读过之后 24 小时内还能再看一遍，然后它会自己燃尽。</div>
+    <div class="bal" style="background:linear-gradient(140deg,rgba(255,170,120,.16),rgba(255,122,92,.07));display:block">
+      <div style="font-size:15px;line-height:1.75">"那句话，我其实记了很久。<br>从你说出口的那天，一直到今天。"</div>
+      <div style="font-size:10.5px;color:var(--ink-3);margin-top:10px">阿屿 · 写下于 3 天前</div>
+    </div>
+    <div class="kv"><div><div class="kv__l">剩余时间</div><div class="kv__t">读完后开始计时</div></div><div class="kv__v">23:12:40</div></div>
+    <div class="kv"><div><div class="kv__l">摘取消耗</div><div class="kv__t">金币会直接销毁</div></div><div class="kv__v">1 枚</div></div>
+    <div class="cta"><button class="btn btn--g" data-close>留在这里</button><button class="btn btn--p" data-close>摘下这片叶子</button></div>` },
+  secretNew(){ return `
+    <h3>藏一片叶子</h3>
+    <div class="sub">写下来，交给树。TA 什么时候摘、要不要摘，都由 TA 决定。</div>
+    <div class="field" style="align-items:flex-start;min-height:110px"><label>内容</label><textarea rows="4" placeholder="只有摘下它的那个人能看到"></textarea></div>
+    <div class="kv"><div><div class="kv__l">可见范围</div><div class="kv__t">只有阿屿能摘</div></div><div class="kv__v">仅 TA</div></div>
+    <div class="kv"><div><div class="kv__l">燃尽时间</div><div class="kv__t">被摘取后 24 小时</div></div><div class="kv__v">24h</div></div>
+    <div class="cta"><button class="btn btn--g" data-close>取消</button><button class="btn btn--p" data-close>挂到树上</button></div>` },
+  diary(){ return `
+    <h3>周六的早市，两只猫和一袋橘子</h3>
+    <div class="sub">阿屿 · 11月8日 09:12 · 共同编辑</div>
+    <p style="font-size:13.5px;line-height:1.85;color:var(--ink-2);margin:0 0 12px">七点半的地坛早市，卖橘子的阿姨认出了我们。她说上次那个"总买最酸的那种"的姑娘，今天怎么没来。我说她在家睡着，我替她挑。</p>
+    <p style="font-size:13.5px;line-height:1.85;color:var(--ink-2);margin:0 0 16px">回来的路上遇到两只猫，一只很瘦，一只有点胖。胖的那只一直跟着我走了半条街，最后在楼道口坐下了，像是在确认我有没有安全到家。</p>
+    <div class="cta"><button class="btn btn--g" data-close>关闭</button><button class="btn btn--p" data-close>继续写</button></div>` },
+  diaryNew(){ return `
+    <h3>写一篇</h3>
+    <div class="sub">写的时候是你的，写完就是我们两个的了。</div>
+    <div class="field"><label>标题</label><input placeholder="今天想记下什么" /></div>
+    <div class="field" style="align-items:flex-start;min-height:120px"><label>正文</label><textarea rows="5" placeholder="慢慢写"></textarea></div>
+    <div class="kv"><div><div class="kv__l">配图</div><div class="kv__t">支持多张 · 上传后可删除</div></div><div class="kv__v">添加</div></div>
+    <div class="kv"><div><div class="kv__l">谁可以看</div><div class="kv__t">共同编辑 / 仅自己</div></div><div class="kv__v">共同</div></div>
+    <div class="cta"><button class="btn btn--g" data-close>存草稿</button><button class="btn btn--p" data-close>发布</button></div>` }
+};
+
+function openSheet(key){
+  const fn = SHEETS[key];
+  if (!fn) return;
+  sheetBody.innerHTML = fn();
+  state.cur = key;
+  state.sheetT = 1;
+  // 按内容实际高度定面板高度：短的面板不会拖一大片空玻璃，长的也不会挤
+  requestAnimationFrame(() => {
+    sheetBody.scrollTop = 0;
+    const kids = [...sheetBody.children];
+    let h = 0;
+    if (kids.length){
+      const first = getComputedStyle(kids[0]);
+      const last = getComputedStyle(kids[kids.length-1]);
+      h = kids[kids.length-1].getBoundingClientRect().bottom
+        - kids[0].getBoundingClientRect().top
+        + parseFloat(first.marginTop || 0) + parseFloat(last.marginBottom || 0);
+    }
+    state.openH = clamp(h + 58, 268, Math.min(S.H*0.72, 640));
+  });
+}
+function closeSheet(){ state.sheetT = 0; }
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-sheet]');
+  if (t){ openSheet(t.dataset.sheet); return; }
+  if (e.target.closest('[data-close]')) closeSheet();
+});
+scrimEl.addEventListener('click', closeSheet);
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeSheet();
+  if (e.key === 'd') dbgEl.classList.toggle('on');
+});
+
+/* 上滑打开 / 下拉关闭 */
+let drag = null;
+function bindDrag(el){
+  el.addEventListener('pointerdown', e => {
+    if (e.target.closest('[data-sheet]') || e.target.closest('input, textarea')) return;
+    drag = { y0:e.clientY, s0:state.sheet };
+    try{ el.setPointerCapture(e.pointerId); }catch(_){}
+  });
+  el.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const dy = drag.y0 - e.clientY;
+    state.sheet = clamp(drag.s0 + dy/230, 0, 1);
+    state.sheetT = state.sheet;
+  });
+  const end = () => {
+    if (!drag) return;
+    drag = null;
+    if (state.sheet > 0.28){ state.sheetT = 1; if (!state.cur) openSheet('coins'); }
+    else state.sheetT = 0;
+  };
+  el.addEventListener('pointerup', end);
+  el.addEventListener('pointercancel', end);
+}
+bindDrag(tabsEl);
+bindDrag(sheetEl);
+
+/* ---------------- Tab ---------------- */
+function setView(name){
+  state.view = name;
+  views.forEach(v => v.classList.toggle('on', v.dataset.view === name));
+  tabBtns.forEach(b => b.classList.toggle('on', b.dataset.tab === name));
+  const map = {
+    today: ['今天', `在一起的第 <b>${days}</b> 天`],
+    diary: ['日记', '86 篇 · 共同编辑'],
+    tree:  ['秘密树', '8 片叶子 · 3 片将燃尽'],
+    me:    ['我们', '自 2023.06.18']
+  };
+  const [t, sub] = map[name];
+  document.getElementById('capT').innerHTML = t + '<small>' + sub + '</small>';
+  closeSheet();
+  phoneEl.classList.remove('scrolled');
+  requestAnimationFrame(layoutStatic);
+}
+tabBtns.forEach(b => b.addEventListener('click', () => setView(b.dataset.tab)));
+document.getElementById('meBtn').addEventListener('click', () => setView('me'));
+document.getElementById('bell').addEventListener('click', () => openSheet('notif'));
+
+/* ---------------- 日期 ---------------- */
+const START = new Date(2023,5,18);
+const today = new Date();
+const days = Math.floor((today - START)/86400000) + 1;
+const WEEK = ['周日','周一','周二','周三','周四','周五','周六'];
+document.getElementById('todayDate').textContent = `${today.getMonth()+1}月${today.getDate()}日 · ${WEEK[today.getDay()]}`;
+document.getElementById('bigDays').textContent = days.toLocaleString('en-US');
+document.getElementById('capDays').textContent = days;
+document.getElementById('meDays').textContent = days;
+const nextA = new Date(today.getFullYear(),5,18);
+if (nextA < today) nextA.setFullYear(today.getFullYear()+1);
+document.getElementById('annivLine').textContent =
+  `距四周年 ${Math.round((nextA-today)/86400000)} 天 · 共写下 86 篇日记`;
+document.querySelectorAll('[data-md]').forEach(el => {
+  const [m,d] = el.dataset.md.split('-').map(Number);
+  let t = new Date(today.getFullYear(), m-1, d);
+  if (t < today) t = new Date(t.getFullYear()+1, m-1, d);
+  el.textContent = Math.round((t-today)/86400000);
+});
+const clockEl = document.getElementById('clock');
+(function tickClock(){
+  const d = new Date();
+  clockEl.textContent = d.getHours() + ':' + String(d.getMinutes()).padStart(2,'0');
+})();
+setInterval(() => {
+  const d = new Date();
+  clockEl.textContent = d.getHours() + ':' + String(d.getMinutes()).padStart(2,'0');
+}, 20000);
+
+/* ---------------- 光 ---------------- */
+const lightT = { x:-0.45, y:0.72 };
+window.addEventListener('pointermove', e => {
+  const r = screenEl.getBoundingClientRect();
+  lightT.x = clamp((e.clientX-r.left)/r.width*2.2-1.1, -1, 1);
+  lightT.y = clamp(1.1-(e.clientY-r.top)/r.height*2.2, -1, 1);
+}, { passive:true });
+
+/* ---------------- 渲染 ---------------- */
+let last = performance.now(), frames = 0, acc = 0, fps = 0, queued = false;
+views.forEach(v => v.addEventListener('scroll', () => {
+  if (queued) return;
+  queued = true;
+  requestAnimationFrame(() => { queued = false; layoutStatic(); });
+}, { passive:true }));
+
+// 滚动超过一点点，顶栏下方就压一层渐变，内容不会和胶囊里的标题糊在一起
+views.forEach(v => v.addEventListener('scroll', () => {
+  if (v.classList.contains('on')) phoneEl.classList.toggle('scrolled', v.scrollTop > 16);
+}, { passive:true }));
+
+function frame(now){
+  requestAnimationFrame(frame);
+  const dt = Math.min(0.05, (now-last)/1000);
+  last = now;
+  state.t += dt;
+
+  if (!drag){
+    // 临界阻尼弹簧：k 决定手感，damp 决定回弹。0.86 会在末端留一点点过冲，
+    // 面板落位时会"弹"一下，不是干巴巴地停住。
+    state.sheetVel += (state.sheetT - state.sheet) * 170 * dt;
+    state.sheetVel *= Math.pow(0.86, dt*60);
+    state.sheet = clamp(state.sheet + state.sheetVel*dt, -0.06, 1.08);
+    if (Math.abs(state.sheetT-state.sheet) < 0.002 && Math.abs(state.sheetVel) < 0.02){
+      state.sheet = state.sheetT; state.sheetVel = 0;
+    }
+  }
+
+  state.lvx += (lightT.x-state.lx)*14*dt;
+  state.lvy += (lightT.y-state.ly)*14*dt;
+  state.lvx *= Math.pow(0.86, dt*60); state.lvy *= Math.pow(0.86, dt*60);
+  state.lx += state.lvx*dt*6; state.ly += state.lvy*dt*6;
+
+  state.form += (1-state.form)*Math.min(1, dt*2.4);
+  state.pulse *= Math.pow(0.02, dt);
+  state.press += ((state.sheet>0.5?0.4:0) - state.press)*Math.min(1, dt*6);
+
+  const pf = clamp((state.form-0.10)/0.90, 0, 1);
+  phoneEl.style.opacity = pf;
+  phoneEl.style.transform = `translateY(${((1-pf)*22).toFixed(1)}px) scale(${(0.984+0.016*pf).toFixed(4)})`;
+  if (pf > 0.55) capEl.classList.add('in');
+
+  updateSheet();
+
+  if (!gl || !progBG) return;
+
+  const W = canvas.width, H = canvas.height;
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.viewport(0,0,W,H);
+  gl.useProgram(progBG);
+  gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+  gl.enableVertexAttribArray(U.aBG);
+  gl.vertexAttribPointer(U.aBG,2,gl.FLOAT,false,0,0);
+  gl.uniform2f(U.bg.uRes, W, H);
+  gl.uniform2f(U.bg.uCss, S.W, S.H);
+  gl.uniform1f(U.bg.uTime, state.t);
+  gl.uniform1f(U.bg.uPulse, state.pulse);
+  gl.uniform1f(U.bg.uBright, 0.96 + 0.06*state.press);
+  gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0,0,W,H);
+  gl.useProgram(progGlass);
+  gl.enableVertexAttribArray(U.aGL);
+  gl.vertexAttribPointer(U.aGL,2,gl.FLOAT,false,0,0);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, bgTex);
+  gl.uniform1i(U.gs.uBg, 0);
+  gl.uniform2f(U.gs.uRes, W, H);
+  gl.uniform1f(U.gs.uDpr, S.dpr);
+  gl.uniform2f(U.gs.uCss, S.W, S.H);
+  gl.uniform1f(U.gs.uTime, state.t);
+
+  for (let i=0;i<8;i++){
+    const r = rects[i];
+    gl.uniform4f(U.gs['r'+i], r.x, r.y, r.w, r.h);
+    gl.uniform1f(U.gs['a'+i], r.r);
+  }
+  gl.uniform1f(U.gs.uMerge, smoothstep(0.0,0.18,state.sheet) * (1-smoothstep(0.30,0.62,state.sheet)));
+  gl.uniform1f(U.gs.uThick, 30);
+  gl.uniform1f(U.gs.uDisp, 1.55);
+  gl.uniform1f(U.gs.uFrost, 0.12);
+  gl.uniform1f(U.gs.uForm, 0.3 + 0.7*state.form);
+  gl.uniform1f(U.gs.uPress, state.press);
+  gl.uniform1f(U.gs.uScrim, smoothstep(0.03,0.42,state.sheet));
+  gl.uniform1f(U.gs.uTabA, 1 - smoothstep(0.12,0.46,state.sheet));
+  gl.uniform1f(U.gs.uViewA, 1 - smoothstep(0.06,0.40,state.sheet));
+  gl.uniform3f(U.gs.uLight, state.lx, state.ly, 0.78);
+  gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+
+  frames++; acc += dt;
+  if (acc > 0.5){
+    fps = Math.round(frames/acc); frames = 0; acc = 0;
+    if (dbgEl.classList.contains('on')){
+      dbgEl.textContent = `fps ${fps}\ncanvas ${canvas.width}x${canvas.height}\ndpr ${S.dpr.toFixed(2)}\ncss ${S.W.toFixed(0)}x${S.H.toFixed(0)}\nsheet ${state.sheet.toFixed(2)}`;
+    }
+  }
+}
+
+/* ---------------- 装到主屏了吗 ---------------- */
+/* 独立窗口模式下系统状态栏是真实存在的，页面里那个假的状态栏要收起来 */
+const IS_STANDALONE = matchMedia('(display-mode: standalone)').matches
+  || navigator.standalone === true
+  || new URLSearchParams(location.search).has('sa');
+document.documentElement.classList.toggle('sa', !!IS_STANDALONE);
+
+/* ---------------- 首次进入：登录 / 绑定 ---------------- */
+const welcomeEl = document.getElementById('welcome');
+const wSteps = ['wStep1','wStep2','wStep3'].map(id => document.getElementById(id));
+const wPhone = document.getElementById('wPhone');
+const wCodeBox = document.getElementById('wCode');
+const wCodeCells = [...wCodeBox.querySelectorAll('input')];
+const wCodeIn = document.getElementById('wCodeIn');
+
+function setWStep(n){ wSteps.forEach((el,i) => { el.hidden = i !== n-1; }); }
+function enterCove(){
+  try{ localStorage.setItem('cove.entered','1'); }catch(_){}
+  welcomeEl.classList.add('out');
+  welcomeEl.style.pointerEvents = 'none';
+  setTimeout(() => { welcomeEl.hidden = true; layoutStatic(); }, 660);
+}
+
+document.getElementById('wNext').addEventListener('click', () => {
+  if (wPhone.value.replace(/\D/g,'').length < 11){ wPhone.focus(); wPhone.animate(
+    [{transform:'translateX(0)'},{transform:'translateX(-5px)'},{transform:'translateX(5px)'},{transform:'translateX(0)'}],
+    {duration:260, easing:'ease-in-out'}); return; }
+  setWStep(2); wCodeCells[0].focus();
+});
+document.getElementById('wInvite').addEventListener('click', () => { setWStep(3); wCodeIn.focus(); });
+document.getElementById('wBack').addEventListener('click', () => setWStep(1));
+document.getElementById('wBack2').addEventListener('click', enterCove);
+document.getElementById('wGo').addEventListener('click', enterCove);
+document.getElementById('wBind').addEventListener('click', enterCove);
+
+wPhone.addEventListener('input', () => {
+  wPhone.value = wPhone.value.replace(/\D/g,'').slice(0,11);
+});
+wCodeCells.forEach((c,i) => {
+  c.addEventListener('input', () => {
+    c.value = c.value.replace(/\D/g,'').slice(0,1);
+    if (c.value && i < wCodeCells.length-1) wCodeCells[i+1].focus();
+    if (wCodeCells.every(x => x.value)) setTimeout(enterCove, 220);
+  });
+  c.addEventListener('keydown', e => {
+    if (e.key === 'Backspace' && !c.value && i > 0) wCodeCells[i-1].focus();
+  });
+});
+
+if (location.search.includes('welcome') || (!STATIC && !(() => { try{ return localStorage.getItem('cove.entered'); }catch(_){ return null; } })())){
+  welcomeEl.hidden = false;
+} else {
+  welcomeEl.hidden = true;
+}
+
+/* ---------------- boot ---------------- */
+window.addEventListener('resize', measure);
+if (window.ResizeObserver) new ResizeObserver(measure).observe(screenEl);
+
+measure();
+state.form = (matchMedia('(prefers-reduced-motion: reduce)').matches || STATIC) ? 1 : 0;
+layoutStatic();
+if (DEBUG) dbgEl.classList.add('on');
+
+// 调试 / 截图：?view=diary&sheet=coins
+const QS = new URLSearchParams(location.search);
+if (QS.get('view')) setView(QS.get('view'));
+if (QS.get('sheet')){ openSheet(QS.get('sheet')); state.sheet = 1; state.sheetT = 1; }
+
+frame(performance.now());
+
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')){
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>

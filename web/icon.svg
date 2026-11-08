@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2=".6" y2="1">
+      <stop offset="0%" stop-color="#0d1224"/><stop offset="58%" stop-color="#120e1c"/><stop offset="100%" stop-color="#1a0d14"/>
+    </linearGradient>
+    <radialGradient id="moon" cx="34%" cy="30%">
+      <stop offset="0%" stop-color="#FFFBEF"/><stop offset="100%" stop-color="#FFE7C0"/>
+    </radialGradient>
+    <linearGradient id="w" x1="70" y1="0" x2="442" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFB08C"/><stop offset="38%" stop-color="#FF7E60"/><stop offset="72%" stop-color="#E58AA8"/><stop offset="100%" stop-color="#A98BFF"/>
+    </linearGradient>
+    <linearGradient id="w2" x1="70" y1="0" x2="442" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#C79BFF"/><stop offset="52%" stop-color="#8F7BF2"/><stop offset="100%" stop-color="#FF8E72"/>
+    </linearGradient>
+    <filter id="soft" x="-30%" y="-60%" width="160%" height="240%">
+      <feGaussianBlur stdDeviation="14"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#g)"/>
+  <circle cx="332" cy="168" r="44" fill="url(#moon)" opacity=".95"/>
+  <circle cx="332" cy="168" r="72" fill="#FFDFA8" opacity=".10" filter="url(#soft)"/>
+  <path d="M70 316c40 0 52-34 92-34s52 34 92 34 52-34 92-34 52 34 96 34" fill="none" stroke="url(#w)" stroke-width="21" stroke-linecap="round" filter="url(#soft)" opacity=".45"/>
+  <path d="M70 316c40 0 52-34 92-34s52 34 92 34 52-34 92-34 52 34 96 34" fill="none" stroke="url(#w)" stroke-width="19" stroke-linecap="round"/>
+  <path d="M70 374c40 0 52-28 92-28s52 28 92 28 52-28 92-28 52 28 96 28" fill="none" stroke="url(#w2)" stroke-width="15" stroke-linecap="round" opacity=".68"/>
+</svg>
