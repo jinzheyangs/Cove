@@ -22,7 +22,7 @@ services:
       - ./migrations:/app/migrations
       # 本地存储模式下的图片落盘到宿主机，容器重建不会丢
       - ./uploads:/app/uploads
-    command: uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uv run --no-sync uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   agent:
     build: .
@@ -41,7 +41,7 @@ services:
         condition: service_healthy
     ports:
       - "8100:8100"
-    command: uv run uvicorn app.agent_main:app --host 0.0.0.0 --port 8100
+    command: uv run --no-sync uvicorn app.agent_main:app --host 0.0.0.0 --port 8100
 
   worker:
     build: .
@@ -58,7 +58,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: uv run arq app.worker.WorkerSettings
+    command: uv run --no-sync arq app.worker.WorkerSettings
 
   postgres:
     image: postgres:16-alpine
