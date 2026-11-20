@@ -12,11 +12,14 @@ FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     UV_COMPILE_BYTECODE=1 \
-    UV_LINK_MODE=copy
+    UV_LINK_MODE=copy \
+    UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple \
+    PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 
 WORKDIR /app
 
 # 从 PyPI 安装 uv，避免依赖 ghcr.io（部分网络环境拉不到）
+# 走国内源：容器内解析 pypi.org 可能拿到 IPv6 地址导致 Network unreachable
 RUN pip install --no-cache-dir uv==0.8.22
 
 COPY pyproject.toml uv.lock ./
