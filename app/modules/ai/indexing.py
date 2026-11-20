@@ -11,16 +11,17 @@
 """
 
 import hashlib
+from datetime import date
 
 import structlog
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.modules.agent.models import ChatImport, ChatMessage
+from app.core.time import TZ
+from app.modules.agent.models import AgentConversation, AgentMessage, ChatMemory
 from app.modules.ai import embeddings, vectorstore
 from app.modules.ai.models import ChunkIndex
-from app.modules.couples.models import Couple
 from app.modules.diaries.models import Diary
 from app.modules.users.models import User
 
@@ -92,7 +93,8 @@ async def _replace_source(
 ) -> None:
     """重建某条业务数据的索引。
 
-    先删旧向量再写新的，保证不会出现「改了内容但旧片段还在」。
+    先写新向量，再清理旧记录。顺序反过来的话，embedding 一失败/进程被杀，
+    就变成「旧的已删、新的没写」，数据静默丢失且没人发现。
     """
     chunks = chunk_text(text, settings.RAG_CHUNK_SIZE, settings.RAG_CHUNK_OVERLAP)  #进行切分
     if not chunks:
@@ -111,19 +113,20 @@ async def _replace_source(
     )
 
     digest = _hash(text)
-    # 内容没变且切片数量一致，直接跳过，省一次 embedding 调用
+    # 内容没变且切片数量一致，通常可以跳过，省一次 embedding 调用。
+    # 但要先跟 Chroma 核对：chunk_index 只是「我索引过」的记录，
+    # 容器重建 / 卷丢数据 / 别处误删都会让向量实际不在，这时必须重建。
     if len(existing) == len(chunks) and all(
         row.content_hash == digest for row in existing
     ):
-        return
-
-    if existing:
-        await vectorstore.delete_ids([row.chroma_id for row in existing])
-        await session.execute(
-            delete(ChunkIndex).where(
-                ChunkIndex.source_type == source_type,
-                ChunkIndex.source_id == source_id,
-            )
+        expected = {row.chroma_id for row in existing}
+        if await vectorstore.existing_ids(list(expected)) == expected:
+            return
+        logger.warning(
+            "indexing.vectors_missing",
+            source_type=source_type,
+            source_id=source_id,
+            expected=len(expected),
         )
 
     vectors = await embeddings.embed_texts(chunks)
@@ -140,6 +143,31 @@ async def _replace_source(
         for i in range(len(chunks))
     ]
     await vectorstore.upsert(ids, vectors, chunks, metadatas)
+
+    # Chroma 的 HNSW 段偶尔不落盘：count 有、get 拿不到，检索就是「想不起来」。
+    # 写完读回确认一次，丢就再写一遍，别等对账任务才发现。
+    if await vectorstore.existing_ids(list(ids)) != set(ids):
+        logger.warning(
+            "indexing.upsert_not_durable",
+            source_type=source_type,
+            source_id=source_id,
+            expected=len(ids),
+        )
+        await vectorstore.upsert(ids, vectors, chunks, metadatas)
+
+    if existing:
+        # 新向量已经落库，这时才动旧的；块数变少时多出来的 id 要删掉。
+        # 反过来「先整体删再写」，embedding 一失败就是永久少几条。
+        new_ids = set(ids)
+        stale_ids = [row.chroma_id for row in existing if row.chroma_id not in new_ids]
+        if stale_ids:
+            await vectorstore.delete_ids(stale_ids)
+        await session.execute(
+            delete(ChunkIndex).where(
+                ChunkIndex.source_type == source_type,
+                ChunkIndex.source_id == source_id,
+            )
+        )
 
     session.add_all(
         [
@@ -206,174 +234,6 @@ async def delete_user_vectors(
     await session.commit()
 
 
-def _build_chat_windows(
-    messages: list[ChatMessage], target_id: int, size: int = 4
-) -> list[list[ChatMessage]]:
-    """按对话窗口切片，窗口必须包含目标用户本人的发言。
-
-    每条目标发言都生成一个窗口（带前面几条上下文），
-    这样检索命中时能看到「对方说了什么 + TA 怎么回」。
-    """
-    windows: list[list[ChatMessage]] = []
-    buffer: list[ChatMessage] = []
-
-    for message in messages:
-        if message.sender_id is None or message.msg_type != "text":
-            continue
-        buffer.append(message)
-        if len(buffer) > size:
-            buffer.pop(0)   #得出最新的4条
-        if message.sender_id == target_id and len(buffer) >= 2:
-            windows.append(list(buffer))
-
-    return windows
-
-
-def _cap_windows(
-    windows: list[list[ChatMessage]], limit: int
-) -> list[list[ChatMessage]]:
-    """超过上限时均匀抽样，控制 embedding 成本。"""
-    if len(windows) <= limit:
-        return windows
-    step = len(windows) / limit
-    return [windows[int(i * step)] for i in range(limit)]
-
-
-def _format_chat_window(
-    window: list[ChatMessage],
-    target_id: int,
-    target_name: str,
-    other_name: str,
-) -> str:
-    """标注每一句是谁说的。
-
-    必须用真实昵称而不是「TA / 对方」：
-    模型看到「对方」时不知道指的是谁，容易把用户自己的口吻当成模拟对象。
-    """
-    lines = []
-    for message in window:
-        who = target_name if message.sender_id == target_id else other_name
-        lines.append(f"{who}：{message.content}")
-    return "\n".join(lines)
-
-
-async def index_chat_import(session: AsyncSession, import_id: int) -> int:
-    """把一次导入的聊天记录切窗口、embedding、写 Chroma。
-
-    Returns:
-        写入的窗口数量。
-    """
-    if not embeddings.is_configured():      #看看是否配置embedding
-        return 0
-
-    import_row = await session.get(ChatImport, import_id)   #从主表看一下是否存在
-    if import_row is None:
-        return 0
-
-    couple = await session.get(Couple, import_row.couple_id)    #查一下情侣关系是否正式
-    if couple is None:
-        return 0
-
-    # 取双方昵称，用于给窗口里的每一句标注说话人
-    users = {
-        user.id: user
-        for user in await session.scalars(
-            select(User).where(User.id.in_([couple.user1_id, couple.user2_id]))
-        )
-    }
-
-    messages = list(
-        await session.scalars(
-            select(ChatMessage)
-            .where(
-                ChatMessage.import_id == import_id,
-                ChatMessage.msg_type == "text",
-            )
-            .order_by(ChatMessage.sent_at, ChatMessage.id)
-        )
-    )   #按时间顺序排好记录
-
-    # 重建前先清掉这个导入已有的索引
-    await delete_chat_import(session, import_id)
-
-    window_no = 0       #窗口计数器
-    for target_id in (couple.user1_id, couple.user2_id):
-        other_id = (
-            couple.user2_id if target_id == couple.user1_id else couple.user1_id
-        )   #得出对方的id
-        target_name = users[target_id].nickname if target_id in users else "TA"     #得到本人的名字
-        other_name = users[other_id].nickname if other_id in users else "对方"      #得到对方的名字
-
-        windows = _cap_windows(
-            _build_chat_windows(messages, target_id), settings.RAG_CHAT_MAX_WINDOWS
-        )
-        texts = [
-            _format_chat_window(window, target_id, target_name, other_name)
-            for window in windows
-        ]   #返回由块返回的字符串列表
-
-        # 分批 embedding，避免单次请求过大
-        for start in range(0, len(texts), 100):
-            batch = texts[start : start + 100]
-            vectors = await embeddings.embed_texts(batch)
-            ids = [
-                f"chat:{import_id}:{target_id}:{window_no + i}"
-                for i in range(len(batch))
-            ]
-            metadatas = [
-                {
-                    "couple_id": import_row.couple_id,
-                    "user_id": target_id,
-                    "source_type": "chat",
-                    "source_id": import_id,
-                    "chunk_no": window_no + i,
-                }
-                for i in range(len(batch))
-            ]
-            await vectorstore.upsert(ids, vectors, batch, metadatas)
-            session.add_all(
-                [
-                    ChunkIndex(
-                        couple_id=import_row.couple_id,
-                        user_id=target_id,
-                        source_type="chat",
-                        source_id=import_id,
-                        chunk_no=window_no + i,
-                        chroma_id=ids[i],
-                        content_hash=_hash(batch[i]),
-                    )
-                    for i in range(len(batch))
-                ]
-            )
-            window_no += len(batch)
-
-    await session.commit()
-    return window_no
-
-
-async def delete_chat_import(session: AsyncSession, import_id: int) -> None:
-    """删除一次导入对应的全部向量和映射。"""
-    rows = list(
-        await session.scalars(
-            select(ChunkIndex).where(
-                ChunkIndex.source_type == "chat",
-                ChunkIndex.source_id == import_id,
-            )
-        )
-    )
-    if not rows:
-        return
-
-    await vectorstore.delete_ids([row.chroma_id for row in rows])
-    await session.execute(
-        delete(ChunkIndex).where(
-            ChunkIndex.source_type == "chat",
-            ChunkIndex.source_id == import_id,
-        )
-    )
-    await session.commit()
-
-
 async def reindex_user(
     session: AsyncSession, couple_id: int, user_id: int
 ) -> None:
@@ -400,3 +260,277 @@ async def reindex_user(
         user_id=user_id,
         diaries=len(diaries),
     )
+
+
+# --------------------------------------------------------------------------
+# 对话记忆：把「我和分身聊过的内容」切成块，长期留着
+# --------------------------------------------------------------------------
+
+# 一块最多多少字、最多几轮。太小检索命中没上下文，太大一块混了好几个话题
+MEMORY_BLOCK_CHARS = 320
+MEMORY_MAX_TURNS = 6
+MEMORY_MAX_MESSAGES = 1000
+
+_WEEKDAY = "一二三四五六日"
+
+
+def _memory_block_text(day: date, lines: list[str]) -> str:
+    """块头带日期，每行带说话人。
+
+    日期必须进正文：模型看到「11 月 13 日」才知道那是上周的事，
+    不然会把历史里的话当成今天刚说的。
+    """
+    head = f"{day.isoformat()} 周{_WEEKDAY[day.weekday()]}"
+    return head + "\n" + "\n".join(lines)
+
+
+def build_memory_blocks(
+    messages: list[AgentMessage],
+    owner_name: str,
+    target_name: str,
+) -> list[tuple[date, str]]:
+    """把消息按「北京时间的一天 + 最多 6 轮」切成块，块之间不重叠。
+
+    切块目标是「回忆事实」，所以和做 few-shot 的滑动窗口不同：
+    不重叠，免得检索 top-k 被同一段反复占满。
+    """
+    blocks: list[tuple[date, str]] = []
+    day: date | None = None
+    lines: list[str] = []
+    turns = 0
+
+    def flush() -> None:
+        nonlocal lines, turns
+        if lines and day is not None:
+            blocks.append((day, _memory_block_text(day, lines)))
+        lines, turns = [], 0
+
+    for message in messages:
+        content = (message.content or "").strip()
+        if not content:
+            continue
+        local = message.created_at
+        if local.tzinfo is None:
+            from datetime import UTC
+
+            local = local.replace(tzinfo=UTC)
+        local = local.astimezone(TZ)
+        message_day = local.date()
+
+        # 换天必封块；一天之内装满轮数或字数也封块
+        if day is not None and message_day != day:
+            flush()
+        day = message_day
+
+        who = owner_name if message.role == "user" else target_name
+        if message.role == "user":
+            turns += 1
+        if lines and (
+            turns > MEMORY_MAX_TURNS
+            or sum(len(line) for line in lines) + len(content) > MEMORY_BLOCK_CHARS
+        ):
+            flush()
+            day = message_day
+        lines.append(f"{who}：{content}")
+
+    flush()
+    return blocks
+
+
+async def index_chat_memories(
+    session: AsyncSession, conversation_id: int, embed: bool = True
+) -> int:
+    """切块写进 chat_memories，并重建这些块的向量索引。
+
+    embed=False 只落 PG（每轮回复后台调一次，不花 embedding 的网络时间），
+    向量留给「离开页面」或每日兜底去建 —— 那时读到的块已经是最新的。
+
+    即使 embedding 没配，块也会落 PG —— 之后配好了重跑一次就能补全，
+    记忆本身不依赖向量库。
+    """
+    conversation = await session.get(AgentConversation, conversation_id)
+    if conversation is None:
+        return 0
+
+    owner = await session.get(User, conversation.owner_id)
+    target = await session.get(User, conversation.target_id)
+    owner_name = owner.nickname if owner is not None else "我"
+    target_name = target.nickname if target is not None else "TA"
+
+    messages = list(
+        await session.scalars(
+            select(AgentMessage)
+            .where(AgentMessage.conversation_id == conversation_id)
+            .order_by(AgentMessage.id)
+            .limit(MEMORY_MAX_MESSAGES)
+        )
+    )
+    blocks = build_memory_blocks(messages, owner_name, target_name)
+
+    # 同一条会话重复处理时按 (day, seq) 覆盖，不堆积
+    existing = {
+        (row.day, row.seq): row
+        for row in await session.scalars(
+            select(ChatMemory).where(ChatMemory.conversation_id == conversation_id)
+        )
+    }
+
+    keep: set[tuple[date, int]] = set()
+    for seq, (day, text) in enumerate(blocks):
+        key = (day, seq)
+        keep.add(key)
+        row = existing.get(key)
+        if row is None:
+            row = ChatMemory(
+                couple_id=conversation.couple_id,
+                owner_id=conversation.owner_id,
+                target_id=conversation.target_id,
+                conversation_id=conversation_id,
+                day=day,
+                seq=seq,
+                text=text,
+            )
+            session.add(row)
+            await session.flush()
+        elif row.text != text:
+            row.text = text
+            await session.flush()
+
+    # 消息变少了（比如会话被裁）时，把多出来的块连同向量一起删掉
+    for key, row in existing.items():
+        if key not in keep:
+            await _delete_source(session, "memory", row.id)
+            await session.delete(row)
+    await session.commit()
+
+    if not embed or not embeddings.is_configured():
+        return len(blocks)
+
+    rows = list(
+        await session.scalars(
+            select(ChatMemory).where(ChatMemory.conversation_id == conversation_id)
+        )
+    )
+    for row in rows:
+        await _replace_source(
+            session,
+            couple_id=row.couple_id,
+            user_id=row.owner_id,      # 记忆归属聊天的本人，检索时按他过滤
+            source_type="memory",
+            source_id=row.id,
+            text=row.text,
+        )
+
+    logger.info(
+        "indexing.memories",
+        conversation_id=conversation_id,
+        blocks=len(blocks),
+        embedded=len(rows) if embeddings.is_configured() else 0,
+    )
+    return len(blocks)
+
+
+async def reindex_memory(session: AsyncSession, memory_id: int) -> bool:
+    """按 id 重建单块记忆的向量。对账任务用。"""
+    row = await session.get(ChatMemory, memory_id)
+    if row is None:
+        return False
+    await _replace_source(
+        session,
+        couple_id=row.couple_id,
+        user_id=row.owner_id,
+        source_type="memory",
+        source_id=row.id,
+        text=row.text,
+    )
+    return True
+
+
+async def reconcile_vectors(session: AsyncSession) -> dict[str, int]:
+    """和 Chroma 对一次账：补缺、清残留、删孤儿。
+
+    Chroma 是容器内可重建的索引，宿主机磁盘满、容器非正常退出都可能让它少几条；
+    chunk_index 记着「应该有哪些」，这里按记录重建，保证「说过的忘不掉」。
+
+    三类问题分别处理：
+    - 源数据已经不存在（日记被删）→ 记录和向量一起清
+    - 记录在、向量缺 → 重新切块 embedding
+    - 向量在、记录没了 → 当孤儿删掉
+
+    Returns:
+        {"repaired": 补回数, "stale": 清理的过期记录数, "orphans": 清理的孤儿数}
+    """
+    stats = {"repaired": 0, "stale": 0, "orphans": 0}
+
+    rows = list(await session.scalars(select(ChunkIndex)))
+    if not rows:
+        return stats
+
+    diary_ids = set(await session.scalars(select(Diary.id)))
+    memory_ids = set(await session.scalars(select(ChatMemory.id)))
+
+    stale = [
+        row
+        for row in rows
+        if (row.source_type == "diary" and row.source_id not in diary_ids)
+        or (row.source_type == "memory" and row.source_id not in memory_ids)
+    ]
+    if stale:
+        await vectorstore.delete_ids([row.chroma_id for row in stale])
+        await session.execute(
+            delete(ChunkIndex).where(ChunkIndex.id.in_([row.id for row in stale]))
+        )
+        await session.commit()
+        stats["stale"] = len(stale)
+        stale_record_ids = {row.id for row in stale}
+        rows = [row for row in rows if row.id not in stale_record_ids]
+
+    expected = {row.chroma_id for row in rows}
+    missing = expected - await vectorstore.existing_ids(list(expected))
+
+    if missing and embeddings.is_configured():
+        diary_sources = sorted(
+            {r.source_id for r in rows if r.source_type == "diary" and r.chroma_id in missing}
+        )
+        for diary_id in diary_sources:
+            try:
+                await index_diary(session, diary_id)
+                stats["repaired"] += sum(
+                    1
+                    for r in rows
+                    if r.source_type == "diary"
+                    and r.source_id == diary_id
+                    and r.chroma_id in missing
+                )
+            except Exception as exc:  # noqa: BLE001 - 单篇失败不影响其它
+                await session.rollback()
+                logger.warning(
+                    "indexing.reconcile_failed",
+                    source_type="diary",
+                    source_id=diary_id,
+                    error=repr(exc),
+                )
+
+        memory_sources = sorted(
+            {r.source_id for r in rows if r.source_type == "memory" and r.chroma_id in missing}
+        )
+        for memory_id in memory_sources:
+            try:
+                if await reindex_memory(session, memory_id):
+                    stats["repaired"] += 1
+            except Exception as exc:  # noqa: BLE001 - 单块失败不影响其它
+                await session.rollback()
+                logger.warning(
+                    "indexing.reconcile_failed",
+                    source_type="memory",
+                    source_id=memory_id,
+                    error=repr(exc),
+                )
+
+    orphans = await vectorstore.all_ids() - expected
+    if orphans:
+        await vectorstore.delete_ids(list(orphans))
+        stats["orphans"] = len(orphans)
+
+    logger.info("indexing.reconciled", **stats)
+    return stats

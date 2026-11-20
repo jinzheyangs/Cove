@@ -64,7 +64,7 @@ class PersonaSettings(Base):
     # 谁在模拟别人
     owner_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
     fidelity: Mapped[str] = mapped_column(
-        String(20), default="faithful", server_default="faithful"
+        String(20), default="idealized", server_default="idealized"
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

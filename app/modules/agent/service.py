@@ -13,43 +13,41 @@
 - 回复要像微信，不要写小作文
 """
 
+import asyncio
 import json
 from datetime import UTC, datetime, timedelta
 
+import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.db import SessionLocal
 from app.core.errors import AppError
 from app.modules.agent import actions, tools
 from app.modules.agent import repository as repo
-from app.modules.agent.models import AgentConversation, PersonaProfile
+from app.modules.agent.models import AgentConversation
 from app.modules.agent.schemas import (
     ChatTurn,
     ConversationDetailOut,
     MessageOut,
 )
 from app.modules.ai import client as ai_client
-from app.modules.ai import retrieval
+from app.modules.ai import indexing, retrieval
 from app.modules.couples.models import Couple
 from app.modules.simta import repository as persona_repo
 from app.modules.users.models import User
 
+logger = structlog.get_logger("agent")
+
 DISCLAIMER = "这是基于历史记录的模拟，不是 TA 本人。"
 
-FAITHFUL_RULES = (
+# 单一模式：既不扮完美的 TA，也不刻意学坏脾气 —— 温和但有据可依
+PERSONA_RULES = (
     "要求：\n"
     "- 像微信聊天一样短，一次 1-3 句，不要写小作文\n"
-    "- 保持 TA 的用词、标点、语气\n"
-    "- 只基于已知记录说话，不确定就说不确定\n"
-    "- 不要替 TA 许诺或做决定"
-)
-
-IDEALIZED_RULES = (
-    "要求：\n"
-    "- 像微信聊天一样短，一次 1-3 句\n"
-    "- 比真实的 TA 更耐心、更温和\n"
-    "- 可以给情绪支持\n"
-    "- 绝对不要替 TA 做承诺（例如「我永远爱你」「我一定会改」）"
+    "- 保持 TA 的用词、标点、语气，比真实的 TA 更耐心一点\n"
+    "- 只基于已知记录说话，不确定就说不确定，不要编造 TA 没表达过的态度\n"
+    "- 可以给情绪支持，但绝对不要替 TA 做承诺（例如「我永远爱你」「我一定会改」）"
 )
 
 
@@ -80,12 +78,6 @@ async def create_conversation(
     return conversation
 
 
-async def list_conversations(
-    session: AsyncSession, user: User
-) -> list[AgentConversation]:
-    return await repo.list_by_owner(session, user.id)
-
-
 async def get_detail(
     session: AsyncSession, couple: Couple, user: User, conversation_id: int
 ) -> ConversationDetailOut:
@@ -105,15 +97,18 @@ async def get_detail(
     )
 
 
-async def delete_conversation(
-    session: AsyncSession, couple: Couple, user: User, conversation_id: int
-) -> None:
-    """删除会话及其全部消息、待确认动作。"""
+async def memorize_conversation(
+    session: AsyncSession,
+    couple: Couple,
+    user: User,
+    conversation_id: int,
+) -> int:
+    """把这次会话切块，存成长期记忆（离开页面时调用）。
+
+    重复调用是幂等的：块按 (day, seq) 覆盖，内容没变不会重新 embedding。
+    """
     conversation = await _get_owned(session, couple, user, conversation_id)
-    await actions.delete_for_conversation(session, conversation.id)
-    await repo.delete_messages(session, conversation.id)
-    await repo.delete_conversation(session, conversation)
-    await session.commit()
+    return await indexing.index_chat_memories(session, conversation.id)
 
 
 async def validate_for_chat(
@@ -150,19 +145,18 @@ async def _build_messages(
     target = await session.get(User, conversation.target_id)    #查询模拟Ta基础的信息
     nickname = target.nickname if target is not None else "TA"  #名字
 
-    # TA 的风格设置：忠实 / 理想化
-    fidelity_row = await persona_repo.get_settings(session, couple.id, user.id)
-    fidelity = fidelity_row.fidelity if fidelity_row else "faithful"
+    # TA 的记录 + 我自己的对话记忆：一次向量化、两路并发查，
+    # 这两段以前是串行且各算一遍向量，光这一步就多花一秒多
+    context_fragments, memory = await retrieval.collect_both(
+        session,
+        couple.id,
+        conversation.target_id,
+        user.id,
+        query_text=message,
+    )
+    context = "\n".join(context_fragments)
 
-    # 被模拟 TA 的完整画像（口头禅、句长、标点习惯）
-    profile = await repo.get_profile(session, couple.id, conversation.target_id)
-
-    fragments = await retrieval.collect_context(
-        session, couple.id, conversation.target_id, query_text=message
-    )   #拿到记忆字符串列表
-    context = "\n".join(fragments)  #得到字符串
-
-    system = _system_prompt(nickname, user.nickname, fidelity, profile, context)    #组装提示词
+    system = _system_prompt(nickname, user.nickname, context, memory)
     history_messages = await _load_history(session, conversation, history)      #拿到历史
 
     return (
@@ -313,6 +307,39 @@ async def stream_reply(
         )
         await session.commit()
 
+        # 每轮都把这一天的对话重切一次块（只写 PG，不调 embedding）。
+        # 前端离开页面时再统一建向量 —— 这样即使前端没来得及触发
+        # （杀进程、断网、请求时序），PG 里的记忆也是最新的。
+        asyncio.create_task(_remember_blocks(conversation.id))
+
+
+_memory_locks: dict[int, asyncio.Lock] = {}
+
+
+def _memory_lock(conversation_id: int) -> asyncio.Lock:
+    """同一条会话的记忆切块串行执行，避免并发写撞唯一约束。"""
+    lock = _memory_locks.get(conversation_id)
+    if lock is None:
+        lock = asyncio.Lock()
+        _memory_locks[conversation_id] = lock
+    return lock
+
+
+async def _remember_blocks(conversation_id: int) -> None:
+    """后台把会话重切成记忆块（只写 PG，不建向量）。失败只记日志。"""
+    try:
+        async with _memory_lock(conversation_id):
+            async with SessionLocal() as session:
+                await indexing.index_chat_memories(
+                    session, conversation_id, embed=False
+                )
+    except Exception as exc:  # noqa: BLE001 - 记忆失败不能影响聊天本身
+        logger.warning(
+            "agent.memory_blocks_failed",
+            conversation_id=conversation_id,
+            error=repr(exc),
+        )
+
 
 async def cleanup_expired(session: AsyncSession) -> int:
     """worker 定时任务：删除过期会话和消息。"""
@@ -361,38 +388,29 @@ async def _load_history(
 def _system_prompt(
     nickname: str,
     user_name: str,
-    fidelity: str,
-    profile: PersonaProfile | None,
     context: str,
+    memory: list[str] | None = None,
 ) -> str:
     """组装人格 prompt。
 
     明确告诉模型：谁是它，谁是用户。
     否则检索到的对话里两个人都在说话，模型可能模仿错人。
 
-    顺序：身份 -> 规则 -> 风格画像 -> 典型发言 -> 检索上下文 -> 边界
+    顺序：身份 -> 规则 -> TA 的记录 -> 你俩的对话 -> 边界
     """
     parts = [
         f"你正在扮演 {nickname}，正在和 {user_name} 聊天。",
-        IDEALIZED_RULES if fidelity == "idealized" else FAITHFUL_RULES,
+        PERSONA_RULES,
         f"下面的记录里，「{nickname}」是你说的话，「{user_name}」是对方说的话。",
         f"只模仿「{nickname}」的语气，不要把对方的口吻当成自己的。",
     ]
 
-    if profile and profile.style_summary:
-        parts.append(f"【风格画像】\n{profile.style_summary}")
-
-    if profile and profile.samples_json:
-        try:
-            samples = json.loads(profile.samples_json)
-        except json.JSONDecodeError:
-            samples = []
-        if samples:
-            lines = "\n".join(f"- {sample}" for sample in samples[:10])
-            parts.append(f"【TA 的典型发言】\n{lines}")
-
     if context:
         parts.append(f"【TA 在类似话题下的真实记录】\n{context}")
+
+    if memory:
+        joined = "\n\n".join(memory)
+        parts.append(f"【你俩之前聊过的片段】\n{joined}")
 
     parts.append(
         "需要查询事实时可以调用工具（记忆、关系、金币、商城、清单、每日一问）。"
@@ -401,5 +419,10 @@ def _system_prompt(
     parts.append(
         "只使用以上记录里的信息和口吻。不确定就说不确定，不要编造。"
         "不要替 TA 做承诺。"
+    )
+    parts.append(
+        "【你俩之前聊过的片段】里的日期是那天的真实日期："
+        "提到过去的约定或事情时要说清楚大概是哪时候（比如「上周你说…」），"
+        "不要把它当成今天刚发生的事。"
     )
     return "\n\n".join(parts)

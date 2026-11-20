@@ -3,9 +3,7 @@
 约定：不 commit，事务由 service 控制。
 """
 
-from datetime import datetime
-
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.secrets.models import Secret
@@ -19,7 +17,6 @@ async def create(
     content: str,
     level: str,
     cost_coins: int,
-    is_burn_after_read: bool,
 ) -> Secret:
     """插入秘密。content 会由 EncryptedText 自动加密。"""
     secret = Secret(
@@ -28,7 +25,6 @@ async def create(
         content=content,
         level=level,
         cost_coins=cost_coins,
-        is_burn_after_read=is_burn_after_read,
     )
     session.add(secret)
     await session.flush()
@@ -48,7 +44,7 @@ async def get_for_update(session: AsyncSession, secret_id: int) -> Secret | None
 async def list_by_author(
     session: AsyncSession, couple_id: int, author_id: int
 ) -> list[Secret]:
-    """我发布的全部秘密（含已燃尽、已销毁）。"""
+    """我发布的全部秘密（含已被摘走、已销毁）。"""
     stmt = (
         select(Secret)
         .where(Secret.couple_id == couple_id, Secret.author_id == author_id)
@@ -62,7 +58,7 @@ async def list_available(
 ) -> list[Secret]:
     """对方发布的、还能摘取的秘密。
 
-    只查 active，所以燃尽和销毁的不会出现在列表里。
+    只查 active，所以摘走销毁的不会出现在列表里。
     """
     stmt = (
         select(Secret)
@@ -81,42 +77,3 @@ async def destroy_one(session: AsyncSession, secret: Secret) -> None:
     secret.status = "destroyed"
     secret.content = ""
     await session.flush()
-
-
-async def destroy_all_of_author(
-    session: AsyncSession, couple_id: int, author_id: int
-) -> int:
-    """一键销毁该用户发布的全部秘密。
-
-    条件里带 author_id，保证绝不会碰到对方的秘密。
-    返回受影响行数。
-    """
-    result = await session.execute(
-        update(Secret)
-        .where(
-            Secret.couple_id == couple_id,
-            Secret.author_id == author_id,
-            Secret.status != "destroyed",
-        )
-        .values(status="destroyed", content="")
-    )
-    return result.rowcount or 0
-
-
-async def purge_burned_before(session: AsyncSession, cutoff: datetime) -> int:
-    """把燃尽期已过的秘密内容清空。
-
-    为什么不读的时候立刻删：
-    返回响应可能失败、网络可能中断，客户端还没看到内容就删掉会永久丢失。
-    所以先保留 24 小时，再由后台任务统一清理。
-    """
-    result = await session.execute(
-        update(Secret)
-        .where(
-            Secret.status == "burned",
-            Secret.content != "",
-            Secret.viewed_at < cutoff,
-        )
-        .values(content="")
-    )
-    return result.rowcount or 0

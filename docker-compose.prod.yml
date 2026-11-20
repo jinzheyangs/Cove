@@ -1,0 +1,114 @@
+# 生产覆盖：docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# 与开发版差异：
+#   - api 去掉 --reload，改用多 worker
+#   - api 去掉源码 bind mount（镜像里的代码才是运行代码）
+#   - api / agent 端口只绑 127.0.0.1，对外统一走 caddy
+#   - caddy 负责 HTTPS 和反代（域名从 .env 的 DOMAIN 读取）
+#   - 内部服务（pg / redis / chroma）只绑 127.0.0.1，不对外网暴露
+#   - 所有服务挂掉自动重启
+
+services:
+  # 一次性任务：先把数据库升到最新版本，成功后才放 api / agent / worker 启动。
+  # 没有这一步，首次部署到空库会全部 500（表都不存在）。
+  migrate:
+    build: .
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: uv run --no-sync alembic upgrade head
+    # 跑完就退出，不要重启
+    restart: "no"
+
+  api:
+    command: uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+    environment:
+      # 这三个不靠 .env 手填：照抄 .env.example 上线是最常见的翻车方式，
+      # ENV 留在 dev 会静默跳过所有生产校验（JWT 默认密钥、字段加密 key 都不拦），
+      # DEBUG 留着 true 会把每条 SQL 打满日志。
+      ENV: prod
+      DEBUG: "false"
+      # 全部流量都经 Caddy 反代，限流和日志要按真实客户端 IP 记账
+      TRUST_PROXY_HEADERS: "true"
+    volumes: !override
+      - ./uploads:/app/uploads
+    ports: !override
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  agent:
+    environment:
+      ENV: prod
+      DEBUG: "false"
+      TRUST_PROXY_HEADERS: "true"
+    ports: !override
+      - "127.0.0.1:8100:8100"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    environment:
+      ENV: prod
+      DEBUG: "false"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"     # HTTP/3
+    environment:
+      # 没有域名就写 :80（只跑 HTTP）；有域名写 example.com，自动签发证书
+      DOMAIN: ${DOMAIN:-:80}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./uploads:/srv/uploads:ro    # /uploads 由 Caddy 直接读磁盘
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+      - agent
+    restart: unless-stopped
+
+  postgres:
+    ports: !override
+      - "127.0.0.1:55432:5432"
+    restart: unless-stopped
+
+  redis:
+    ports: !override
+      - "127.0.0.1:56379:6379"
+    restart: unless-stopped
+
+  chroma:
+    ports: !override
+      - "127.0.0.1:58000:8000"
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

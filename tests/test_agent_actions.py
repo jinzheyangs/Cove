@@ -197,7 +197,6 @@ async def test_confirm_buys_mall_item_and_deducts_coins(session):
     item = await mall_service.create_item(
         session, couple, b, ItemCreate(title="早餐", price_coins=10)
     )
-    await mall_service.approve_item(session, couple, a, item.id)
 
     action = await actions.create_pending(
         session, conversation, a, "buy_mall_item", {"item_id": item.id}
@@ -217,7 +216,6 @@ async def test_confirm_retry_does_not_double_charge(session):
     item = await mall_service.create_item(
         session, couple, b, ItemCreate(title="早餐", price_coins=10)
     )
-    await mall_service.approve_item(session, couple, a, item.id)
 
     action = await actions.create_pending(
         session, conversation, a, "buy_mall_item", {"item_id": item.id}
@@ -245,7 +243,6 @@ async def test_buy_without_balance_keeps_action_pending(session):
     item = await mall_service.create_item(
         session, couple, b, ItemCreate(title="早餐", price_coins=10)
     )
-    await mall_service.approve_item(session, couple, a, item.id)
 
     action = await actions.create_pending(
         session, conversation, a, "buy_mall_item", {"item_id": item.id}
@@ -271,14 +268,3 @@ async def test_expire_pending_marks_old_actions(session):
     assert count == 1
     await session.refresh(action)
     assert action.status == "expired"
-
-
-async def test_delete_conversation_removes_actions(session):
-    a, _, couple = await seed_couple(session)
-    conversation = await _conversation(session, couple, a)
-    action = await _pending_todo(session, couple, a, conversation)
-    action_id = action.id
-
-    await service.delete_conversation(session, couple, a, conversation.id)
-
-    assert await session.get(AgentAction, action_id) is None

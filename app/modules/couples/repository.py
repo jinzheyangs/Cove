@@ -65,10 +65,17 @@ async def lock_users(session: AsyncSession, user_ids: list[int]) -> None:
 
 
 async def create_couple(
-    session: AsyncSession, *, user1_id: int, user2_id: int, bind_at: datetime
+    session: AsyncSession, *, user1_id: int, user2_id: int, bind_at: datetime,
+    created_by: int | None = None,
 ) -> Couple:
-    """创建关系。调用方必须保证 user1_id < user2_id。"""
-    couple = Couple(user1_id=user1_id, user2_id=user2_id, status="active", bind_at=bind_at)
+    """创建关系。调用方必须保证 user1_id < user2_id。
+
+    created_by 是发起邀请的人：绑定后的「填在一起那天」只问他一个人。
+    """
+    couple = Couple(
+        user1_id=user1_id, user2_id=user2_id, status="active", bind_at=bind_at,
+        created_by=created_by,
+    )
     session.add(couple)
     await session.flush()
     return couple

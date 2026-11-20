@@ -1,0 +1,29 @@
+{
+  "appId": "com.cove.app",
+  "appName": "Cove",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "backgroundColor": "#FFFFFF",
+  "ios": {
+    "contentInset": "never",
+    "scrollEnabled": false
+  },
+  "android": {
+    "backgroundColor": "#FFFFFF",
+    "allowMixedContent": false
+  },
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "Keyboard": {
+      "resize": "none",
+      "resizeOnFullScreen": true
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#FFFFFF",
+      "overlaysWebView": true
+    }
+  }
+}

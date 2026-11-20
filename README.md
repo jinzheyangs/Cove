@@ -2,11 +2,8 @@
 
 两个人之间，慢慢长出来的一段关系。
 
-Cove 是一个面向情侣的关系经营 App。这个仓库是**后端服务**的源码。
-
-> 状态：功能开发中，尚未发布。
-
-## 技术栈
+面向情侣的关系经营 App：日记、共同清单、恋爱账本、纪念日、金币、秘密树、每日一问、模拟 TA。
+仓库包含后端服务、Vue 3 前端，以及 iOS / Android 打包工程。
 
 | 层 | 选型 |
 |---|---|
@@ -14,334 +11,297 @@ Cove 是一个面向情侣的关系经营 App。这个仓库是**后端服务**�
 | ORM | SQLAlchemy 2.0 (async) + asyncpg |
 | 数据库 | PostgreSQL 16 |
 | 缓存 / 队列 | Redis 7 + ARQ |
-| 部署 | Docker Compose + uvicorn |
+| 向量检索 | Chroma（模拟 TA 的 RAG，可重建） |
+| 前端 | Vue 3 + Vite，WebGL 液态玻璃，Capacitor 打包 iOS / Android |
+| 部署 | Docker Compose + Caddy（HTTPS 与反代） |
 | 包管理 | uv |
 
-## 本地运行
+## 目录
 
-```bash
-cp .env.example .env
+```
+app/                     后端
+├─ main.py               业务入口（/api/v1），同时托管前端 dist
+├─ agent_main.py         独立 AI 服务入口（/api/v1/agent，:8100）
+├─ worker.py             ARQ 后台任务（对账、燃尽、清理、索引重建）
+├─ core/                 配置、数据库、Redis、中间件、加密、限流、指标
+└─ modules/<name>/       router → service → repository → models / schemas
+
+migrations/               Alembic 迁移
+scripts/                  运维与开发脚本
+tests/                    后端测试（150 项）
+frontend/                 Vue 3 前端（含 android / ios 工程）
+deploy/                   Caddyfile、Prometheus、Alertmanager 配置
+docs/                     BACKEND.md、openapi.json、design/（设计稿，不进镜像）
+```
+
+## 本地开发
+
+### 一键起（Windows）
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/dev.ps1
+```
+
+起后端 `:8000`（同时托管 `frontend/dist`）与前端热更新 `:5173`（`/api`、`/uploads` 代理到 8000）。
+
+### 手动起
+
+```powershell
+# 1. 依赖
 uv sync
-docker compose up -d postgres
+
+# 2. 配置（只需一次）
+Copy-Item .env.example .env
+
+# 3. 基础设施（PostgreSQL / Redis / Chroma 只绑本机端口）
+docker compose up -d postgres redis chroma
+
+# 4. 迁移
 uv run alembic upgrade head
-uv run uvicorn app.main:app --reload
+
+# 5. 后端（改代码需要重启，默认不带 --reload）
+uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
+
+# 6. 前端热更新
+cd frontend; npm install; npm run dev
 ```
 
-> 本地数据库映射到 **55432** 端口，避开机器上可能已有的 5432。
+本机端口映射：PostgreSQL `55432`、Redis `56379`、Chroma `58000`（避开默认端口，避免和本机已有服务冲突）。
 
-验证：
+后台任务（对账、燃尽清理、索引重建）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/run_worker.ps1
+# 或者：uv run arq app.worker.WorkerSettings
+```
+
+自检：
+
+```powershell
+curl http://localhost:8000/health        # 进程存活，不查库
+curl http://localhost:8000/health/db     # 数据库连通
+```
+
+接口文档：<http://localhost:8000/docs>（OpenAPI JSON 见 `docs/openapi.json`，重新生成用 `uv run python scripts/generate_api_doc.py`）。
+
+### 前端
+
+| 命令 | 作用 |
+|---|---|
+| `npm run dev` | Vite dev server `:5173`，`/api` 与 `/uploads` 代理到 `:8000` |
+| `npm run build` | 打包到 `frontend/dist`，后端 `FRONTEND_DIST` 默认就指向它 |
+| `npm run cap:sync` | build + 同步进 `android` / `ios` |
+| `npm run cap:android` | build + sync + 打开 Android Studio |
+| `npm run cap:ios` | build + sync + 打开 Xcode（需 macOS） |
+
+调试参数（加在 URL 上）：`?view=today|diary|tree|me`、`?sheet=<面板名>`、`?static`（跳过入场动画）、`?welcome`（显示登录页）。
+
+### 测试
+
+```powershell
+uv run pytest          # 150 项；会自动建 cove_test 库，不碰开发库
+uv run ruff check app tests scripts
+```
+
+## 生产部署
+
+### 1. 服务器准备
+
+- 一台 Linux 主机（2C2G 起步），装 Docker 与 Compose v2
+- 放行 80 / 443（Caddy 申请证书要用 80 做 HTTP-01 验证）
+- 有域名的话先解析到这台机器；**中国大陆服务器对外提供网站服务需要 ICP 备案**，备案下来前 80/443 会被拦，可先用非 80 端口或境外机器联调
+
+### 2. `.env`（必改）
+
+复制 `.env.example` 为 `.env`，然后逐项确认：
+
+| 项 | 线上值 | 不改的后果 |
+|---|---|---|
+| `ENV` | `prod` | HSTS 不生效、密钥校验被跳过 |
+| `DEBUG` | `false` | SQL 全量打印，日志爆量且泄露数据 |
+| `JWT_SECRET` | `openssl rand -hex 32` | 任何人可自己签发 token 冒充用户（`prod` 下填默认值会拒绝启动） |
+| `DATA_ENCRYPTION_KEY` | `openssl rand -base64 32` | `prod` 下为空会拒绝启动；见下面的「密钥迁移」 |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` | 强密码 | 数据库弱口令 |
+| `DOMAIN` | `cove.example.com`；内网试跑写 `:80` | Caddy 不知道签哪个域名的证书 |
+| `LLM_API_KEY` | 你的模型 key | 模拟 TA 不可用 |
+| `STORAGE_BACKEND` | 单机部署留 `local`；要多机/换机不留图再切 `oss` | 图片落在容器卷之外会丢 |
+| `CORS_ORIGINS` | 前端域名（同源托管可留空） | Web 端跨域失败 |
+
+`TRUST_PROXY_HEADERS=true` 已由 `docker-compose.prod.yml` 注入，不用手写——它让限流按 `X-Forwarded-For` 里的真实客户端 IP 记账，否则所有用户会共用 Caddy 那一个桶。
+
+#### 密钥迁移：把现有数据带上生产
+
+开发环境没有配 `DATA_ENCRYPTION_KEY` 时，字段加密用的是 `SHA256(JWT_SECRET)`。所以**如果要把开发库里已有的秘密、日记带过去**，生产 `.env` 的 `DATA_ENCRYPTION_KEY` 必须填成开发 `.env` 里 `JWT_SECRET` 的**原值**，密钥才一致；随便生成一个新的，旧数据会解不开（`InvalidTag`）。
+
+全新空库部署则直接用新生成的随机值，不受影响。
+
+### 3. 启动
 
 ```bash
-curl http://localhost:8000/health
-curl http://localhost:8000/health/db
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
 
-接口文档：
+`migrate` 是一次性服务：先 `alembic upgrade head`，成功退出后 api / agent / worker 才启动，首次上库不会出现「表不存在」。以后再升版本，同样跑这条命令即可，迁移会自动执行。
 
-- 在线试用：<http://localhost:8000/docs>
-- 前端接口表：[docs/API.md](docs/API.md)
-- OpenAPI JSON（可导入 Apifox / Postman）：[docs/openapi.json](docs/openapi.json)
+### 4. 对外入口
 
-重新生成：
+| 端口 | 服务 | 说明 |
+|---|---|---|
+| 80 / 443 | caddy | 唯一对外入口，HTTPS 由它负责 |
+| 127.0.0.1:8000 | api | 只给 Caddy 用 |
+| 127.0.0.1:8100 | agent | 同上 |
+| 127.0.0.1:55432 / 56379 / 58000 | pg / redis / chroma | 不对外暴露 |
+
+`deploy/Caddyfile` 的路由：
+
+- `/uploads/*` → Caddy 直接从 `./uploads` 读盘
+- `/api/v1/agent*` → `agent:8100`
+- 其余 → `api:8000`（前端静态文件、业务接口、`/docs`）
+
+证书与 Caddy 状态存在命名卷 `cove_caddy_data`，容器重建不会重签。
+
+### 5. 上线自检
 
 ```bash
-uv run python scripts/generate_api_doc.py
+curl -I https://cove.example.com/            # 200，返回 index.html
+curl https://cove.example.com/health         # {"code":0,...}
+curl https://cove.example.com/health/db      # {"data":{"db":"ok"}}
+curl https://cove.example.com/api/v1/users/me   # 需要登录的接口，应返回 401
 ```
 
-后台任务（对账、燃尽清理）：
+再打开 App 走一遍：注册 → 邀请码绑定 → 写一篇日记带图 → 记账 → 模拟 TA 发一句话。
+
+### 6. 备份
 
 ```bash
-uv run arq app.worker.WorkerSettings
+BACKUP_PASSPHRASE=xxx bash scripts/backup_db.sh backup
+BACKUP_PASSPHRASE=xxx bash scripts/backup_db.sh restore backups/cove-xxx.sql.gz.enc
 ```
 
-## 测试
+备份加密口令就是 `.env` 里的 `BACKUP_PASSPHRASE`，默认保留 30 天。`uploads/` 是用户图片，需要单独做快照或对象存储同步。
 
-```bash
-uv run pytest
-```
+## 接口一览
 
-测试会自动创建 `cove_test` 数据库，不影响开发库。
-
-## 架构
-
-经典三层，依赖方向固定为 `router → service → repository`，不许反向。
-
-```
-app/modules/<name>/
-├── router.py       # 接口层：HTTP 参数、校验、返回
-├── service.py      # 业务层：规则、事务边界
-├── repository.py   # 数据访问层：所有 SQL 只出现在这里
-├── models.py       # 表结构
-└── schemas.py      # 请求 / 响应结构
-```
-
-跨模块的事务组合：`coins.service` 提供 `mint_locked` / `spend_locked`，
-它们不提交事务，调用方把「扣币 + 业务写入」放进同一个事务。
-
-## 模块
+所有业务接口前缀 `/api/v1`：
 
 | 模块 | 前缀 | 说明 |
 |---|---|---|
-| 认证 | `/api/v1/auth` | 手机号 + 密码，JWT，修改密码 |
-| 用户 | `/api/v1/users` | 当前用户、资料编辑 |
-| 情侣 | `/api/v1/couples` | 邀请码绑定、解绑 |
-| 金币 | `/api/v1/coins` | 余额、流水、赠与 |
-| 金币申请 | `/api/v1/coin-applies` | 申请、审批、拒绝 |
-| 秘密树 | `/api/v1/secrets` | 发布、摘取、燃尽、销毁 |
-| 商城 | `/api/v1/mall` | 上架审批、购买、核销 |
-| 日记 | `/api/v1/diaries` | 共同编辑 / 各自视角 |
-| 清单 | `/api/v1/todos` | 共同 / 单人，完成生成纪念卡 |
-| 账本 | `/api/v1/bills` | 金钱与非金钱付出、隐私、统计 |
-| 每日一问 | `/api/v1/daily` | 固定题库，每天一题 |
-| 纪念日 | `/api/v1/anniversaries` | 在一起、双方生日、自定义倒计时 |
-| 模拟TA | `/api/v1/sim-ta` | 授权、忠实度、对话 |
-| 上传 | `/api/v1/uploads` | 日记图片、头像上传与删除 |
-| AI 对话 | `/api/v1/agent` | 多轮人格对话、会话管理 |
-| 审计 | `/api/v1/audit` | 敏感操作记录 |
-| 通知 | `/api/v1/notifications` | 站内通知、未读数、已读 |
-| 隐私 | `/api/v1/privacy` | 注销账号、导出个人数据 |
+| 认证 | `/auth` | 手机号 + 密码、JWT、改密码 |
+| 用户 | `/users` | 当前用户、资料 |
+| 情侣 | `/couples` | 邀请码绑定、解绑、在一起日期 |
+| 金币 | `/coins` | 余额、流水、赠与 |
+| 金币申请 | `/coin-applies` | 申请、审批 |
+| 秘密树 | `/secrets` | 发布、摘取、燃尽、销毁 |
+| 商城 | `/mall` | 上架、购买、核销 |
+| 日记 | `/diaries` | 个人 / 共同视角，左滑删除在客户端 |
+| 清单 | `/todos` | 共同 / 单人，完成生成纪念卡 |
+| 账本 | `/bills` | 金钱与非金钱付出、统计 |
+| 每日一问 | `/daily` | 固定题库，每天一题 |
+| 纪念日 | `/anniversaries` | 在一起 / 生日 / 自定义倒计时 |
+| 模拟TA | `/sim-ta` | 授权开关、状态 |
+| AI 对话 | `/agent` | 多轮人格对话、SSE 流式、待确认动作 |
+| 上传 | `/uploads` | 日记图片、头像 |
+| 通知 | `/notifications` | 站内通知、未读数 |
+| 隐私 | `/privacy` | 注销账号 |
 
-## 关键设计决策
+## 关键设计
 
-- **金币消费 = 销毁**，赠与 = 系统发行。金币是消耗品，不是货币。
-- **余额是缓存，流水是真相**，worker 每天 03:17 对账。
-- **扣币加行锁**，按 `user_id` 升序，并发下余额不会为负。
-- **所有金币写操作有 `idempotency_key` 唯一索引。**
-- **创建类接口支持幂等键**：日记、清单、账单、商城下单都接受 `idempotency_key`，
-  同一个 key 重复提交只生效一次。
-- **阅后即焚**：读后 24 小时内可再看，之后由后台任务清空内容。
-- **一键销毁只销毁自己发布的秘密**，不触碰对方的。
-- **账本不提供个人对比**，只输出共同视角的汇总。
-- **模拟TA 必须先获得对方授权**，撤销即停用；理想化模式禁止替对方做承诺。
+- **依赖方向固定** `router → service → repository`，SQL 只出现在 repository。
+- **金币消费 = 销毁，赠与 = 系统发行**；余额是缓存，流水是真相，worker 每天 03:17 对账。
+- **扣币加行锁**（按 `user_id` 升序），并发下余额不会为负。
+- **写操作幂等**：日记、清单、账单、下单都接受 `idempotency_key`，重复提交只生效一次。
+- **阅后即焚**：读后 24 小时内可再看，之后由 worker 清空内容。
+- **账本不提供个人对比**，只输出共同视角汇总。
+- **模拟 TA 必须先获得对方授权**，撤销即停用。
+- **字段加密**：秘密、日记等私密内容 AES-256-GCM 存库；密钥缺失时生产直接拒绝启动。
+- **令牌**：access 30 分钟，refresh 30 天、可轮换、可吊销。
+- **限流三档**（全局 / 认证 / AI），Redis 故障时放行；登录另有按手机号的失败锁定。
+- **AI 熔断**：连续失败 5 次开 60 秒，半开时放一个请求试探。
 
-## 图片上传
+## 模拟 TA
 
-`POST /api/v1/uploads/diary-image`（multipart）上传日记图片，返回 `key` 和 `url`。
-
-- 数据库存 **key**，展示时用服务端生成的 **url**
-- 开发环境：`STORAGE_BACKEND=local`，文件落到 `./uploads`，通过 `/uploads` 访问
-- 生产环境：`STORAGE_BACKEND=oss`，并安装 OSS 依赖：`uv sync --extra oss`
-- 私有 OSS 桶返回的是带时效的签名 URL，**不要把它存进数据库**
-
-## 可观测性与容错
-
-- **结构化日志**：开发环境彩色输出，生产环境 JSON；每条日志带 `request_id`
-- **请求 ID**：读取或生成 `X-Request-ID`，响应头返回，前端报错时可上报
-- **日志脱敏**：不记录请求体。秘密、日记等私密内容只记录 ID
-- **审计日志**：销毁秘密、解绑、注销、撤销授权等敏感操作留痕
-- **AI 熔断**：连续失败 5 次打开 60 秒，到期半开放一个请求试探
-- **AI 重试**：超时 30 秒，失败重试 1 次
-- **降级**：AI 不可用时，模拟TA 返回温和提示，不把技术错误甩给用户
-- **限流**：按 IP 三档（全局 / 认证 / AI），Redis 故障时放行
-- **登录防爆破**：连续失败 5 次锁定 15 分钟
-- **指标**：`/metrics` 暴露 Prometheus 指标，可用 `METRICS_TOKEN` 保护
-- **链路追踪**：OpenTelemetry + Jaeger，默认关闭；开启后可见 SQL / Redis / AI 调用的耗时瀑布图
-- **字段加密**：秘密、日记、聊天记录等私密内容 AES-256-GCM 加密存储
-- **令牌生命周期**：access token 30 分钟，refresh token 可轮换、可吊销
-
-运维细节见 [docs/OPERATIONS.md](docs/OPERATIONS.md)。
-
-## 模拟TA 的 RAG
-
-链路：
+### 对话链路
 
 ```
-日记 / 聊天记录写入
-    ↓ 事务提交后入队（ARQ）
-切片 → embedding → Chroma
-    ↓
+POST /agent/conversations                        新建会话
+POST /agent/conversations/{id}/messages/stream   发消息，SSE 流式
+GET  /agent/conversations/{id}                   历史
+POST /agent/conversations/{id}/memorize          把最近几轮切成记忆块写入向量库
+POST /agent/actions/{id}/confirm|cancel           确认 / 取消待执行的写操作
+```
+
+SSE 事件：`delta`（文本片段）、`tool`（工具运行状态）、`confirm`（待确认动作）、`done`、`error`。
+
+每轮：取最近 10 轮历史 → 用问题做 RAG 检索 → system prompt = 记忆片段 + 检索结果 + 规则 → 调模型。
+每轮最多 5 次工具调用，防止死循环。
+
+### 工具
+
+只读：`search_memories`、`get_couple_summary`、`get_coin_balance`、`list_mall_items`、`list_todos`、`get_today_question`。
+写：`propose_create_todo`、`propose_create_diary`、`propose_buy_mall_item` —— 一律只创建 `pending` 动作，用户点确认才真正写库，10 分钟未确认自动过期，重复确认幂等。
+
+### RAG
+
+```
+日记 / 对话记忆写入 → 事务提交后入队（ARQ）→ 切片 → embedding → Chroma
 用户提问 → embedding → Chroma top-k（按 couple_id + user_id 过滤）→ prompt → LLM
 ```
 
-设计原则：
-
-- **PG 是真相，Chroma 是可重建的索引**；`chunk_index` 表记录映射
-- 内容没变不重新 embedding（`content_hash`）
+- **PG 是真相，Chroma 是可重建的索引**；`chunk_index` 表记录映射，内容没变不重复 embedding（`content_hash`）
 - embedding 未配置或 Chroma 不可用时，自动退回「最近日记」
-- 撤销模拟TA 授权、注销账号会删除对应向量
-- 检索只读被模拟者自己的记录，不会混入用户自己的内容
+- 撤销授权、注销账号会删除对应向量
+- 每小时对账一次：缺的按源重建、孤儿删掉
 
-配置（embedding 走 OpenAI 兼容接口，供应商可换）：
-
-```env
-RAG_ENABLED=true
-CHROMA_HOST=chroma
-CHROMA_PORT=8000
-CHROMA_COLLECTION=cove_persona
-RAG_TOP_K=5
-RAG_CHUNK_SIZE=400
-RAG_CHUNK_OVERLAP=50
-
-EMBEDDING_API_KEY=...
-EMBEDDING_BASE_URL=...
-EMBEDDING_MODEL=...
-```
-
-重建某个用户的索引：
+重建单个用户索引：
 
 ```bash
 uv run python scripts/reindex_user.py <couple_id> <user_id>
 ```
 
-## AI 多轮对话
+## 运维脚本
 
-模拟TA 的对话入口是 `/api/v1/agent`，不是单次问答：
-
-```
-POST /agent/conversations                        新建会话
-POST /agent/conversations/{id}/messages/stream   发消息，SSE 流式返回
-GET  /agent/conversations/{id}                   查看历史
-DELETE /agent/conversations/{id}                 删除会话和消息
-POST /agent/actions/{id}/confirm                 确认 Agent 提议的写操作
-POST /agent/actions/{id}/cancel                  取消提议
-```
-
-只有一个对话接口，流式返回，工具调用也在同一个流里。
-
-SSE 事件类型：
-
-| event | 含义 |
+| 脚本 | 用途 |
 |---|---|
-| `delta` | 文本片段，直接追加到气泡 |
-| `tool` | 工具状态：`running` / `done`，只含名称和可读标签 |
-| `confirm` | 待确认的写操作：`action_id`、标题、分类、有效期 |
-| `done` | 本轮结束 |
-| `error` | 出错，带业务错误码 |
+| `scripts/dev.ps1` | 一键起本地后端 + 前端（`-NoFrontend` 只起后端） |
+| `scripts/run_worker.ps1` | 前台跑 ARQ worker |
+| `scripts/backup_db.sh` | 加密备份 / 恢复数据库 |
+| `scripts/encrypt_existing_data.py` | 把历史明文列加密成 `v1:` 格式（先备份） |
+| `scripts/reindex_user.py` | 重建某用户向量索引 |
+| `scripts/generate_api_doc.py` | 重新生成 `docs/openapi.json` |
+| `scripts/grant_welcome_coins.py` | 给存量用户补发新人金币 |
+| `scripts/seed_daily_questions.py` | 灌每日一问题库 |
+| `scripts/dev_issue_tokens.py` | 本地签发测试 token（仅开发） |
 
-示例：
+## 常见问题
 
-```
-event: delta
-data: {"delta":"我看看"}
+**上线后不停 429 / 提示请求太频繁**
+限流按 IP 记账。直连（本地开发）看 socket 对端；走反代必须让 `TRUST_PROXY_HEADERS=true`（prod compose 已设），否则所有用户共用 Caddy 一个桶。确认 `deploy/Caddyfile` 没把 `X-Forwarded-For` 去掉。
 
-event: tool
-data: {"id":"call_1","name":"get_coin_balance","label":"正在查金币","status":"running"}
+**老数据报 `InvalidTag` / 解不开密文**
+加密密钥换了。开发环境用 `SHA256(JWT_SECRET)` 派生，生产用 `DATA_ENCRYPTION_KEY`；把 `DATA_ENCRYPTION_KEY` 填成旧 `JWT_SECRET` 的原值即可，或先 `scripts/backup_db.sh` 备份后用 `scripts/encrypt_existing_data.py` 重加密。
 
-event: tool
-data: {"id":"call_1","name":"get_coin_balance","status":"done"}
+**部署起来全是 500，日志里 `relation "..." does not exist`**
+迁移没跑。用上面的生产命令启动，`migrate` 服务会自动执行 `alembic upgrade head`；手动补可 `docker compose exec api uv run alembic upgrade head`。
 
-event: delta
-data: {"delta":"你现在有 12 个金币"}
+**图片 404 / 重建容器后图片没了**
+`uploads/` 通过卷挂在宿主机（`./uploads:/app/uploads`，Caddy 只读挂 `/srv/uploads`），别改成容器内部路径；换机器时记得一起搬走。
 
-event: done
-data: {"conversation_id":1}
-```
+**前端打开是白屏**
+`frontend/dist` 不存在。`cd frontend && npm run build`，或直接走 Docker 构建（镜像里会自己打包）。
 
-每轮流程：
-
-1. 读取最近 10 轮历史（服务端保存，或客户端自带）
-2. 用当前问题做 RAG 检索
-3. system prompt = 风格画像 + 典型发言 + 检索结果 + 规则
-4. 调模型，回复约束成微信式短句
-
-Agent 可以调用的只读工具：
-
-| 工具 | 用途 |
-|---|---|
-| `search_memories` | 检索日记、聊天片段 |
-| `get_couple_summary` | 在一起多少天、昵称 |
-| `get_coin_balance` | 金币余额 |
-| `list_mall_items` | 已上架商品 |
-| `list_todos` | 未完成的共同清单 |
-| `get_today_question` | 今日一问 |
-| `propose_create_todo` | 提议添加共同清单（需用户确认） |
-| `propose_create_diary` | 提议写一篇个人日记（需用户确认） |
-| `propose_buy_mall_item` | 提议兑换商品（扣金币，需用户确认） |
-
-每轮最多 5 次工具调用，防止模型死循环。
-
-### 写操作确认
-
-Agent 不能直接写数据。它只能提出一个待确认动作：
-
-```
-模型调用 propose_create_todo
-    ↓
-服务端只创建 pending 动作，不写清单
-    ↓
-SSE 推 confirm 事件
-    ↓
-客户端展示确认卡片
-    ↓
-用户点确认 → POST /agent/actions/{id}/confirm
-    ↓
-这时才真正写入清单
-```
-
-规则：
-
-- 只有发起动作的人能确认
-- 重复确认是幂等的，不会写两条
-- 10 分钟未确认自动过期
-- 删除会话会一并删掉待确认动作
-
-会话策略：
-
-- 默认服务端保存，30 天过期，每次新消息顺延
-- `persist=false` 时服务端不存消息，客户端每次带 `history`
-- 删除会话会连同消息一起删
-- worker 每天 04:07 清理过期会话
-
-### 聊天记录导入
-
-导入格式统一为 **JSONL**，每行一个消息对象：
-
-```json
-{"sender":"我","sent_at":"2024-05-01T20:13:00+08:00","content":"今天好累"}
-{"sender":"TA","sent_at":"2024-05-01T20:14:00+08:00","content":"怎么啦"}
-```
-
-- `sender` 用上传时填的 `owner_name` 或 `partner_name`
-- `sent_at` 支持 ISO 8601、常见日期格式、Unix 秒/毫秒
-- `type` 可选，默认 `text`
-
-导入接口：
-
-```
-POST /api/v1/agent/imports   (multipart)
-  file=chat.jsonl
-  owner_name=我
-  partner_name=TA
-```
-
-规则：
-
-- 双方都授权后才能导入
-- 单次上限 20MB / 10 万条
-- 同一条消息按哈希去重，重复导入不会翻倍
-- 原始文件只在内存里解析，不落盘
-- 导入后 worker 生成风格画像和向量索引
-- 删除导入会清理消息、向量和画像
-
-### 独立 AI 服务
-
-`app/agent_main.py` 只挂载 agent 路由，可以单独部署：
-
-```bash
-uv run uvicorn app.agent_main:app --port 8100
-```
-
-docker compose 里有 `agent` 服务（8100）。生产环境用 nginx 把
-`/api/v1/agent` 转发到它，业务接口仍留在 `api:8000`。
-两个服务共享同一个 PostgreSQL、Redis、Chroma。
+**模拟 TA 想不起说过的话**
+Chroma 的 HNSW 段偶尔不落盘，表现为 `count` 有、`get` 拿不到。写入后会立刻读回校验，worker 每小时对账修复；急用时 `scripts/reindex_user.py`。
 
 ## 开发进度
 
-- [x] 项目骨架与三层架构
-- [x] 用户注册登录 / 情侣绑定
-- [x] 金币账本与申请审批
-- [x] 秘密树
-- [x] 商城
-- [x] 恋爱日记 / 共同清单 / 恋爱账本
-- [x] 每日一问
-- [x] 纪念日倒计时（在一起 / 生日 / 自定义）
-- [x] 模拟TA（授权 + 设置 + 对话）
-- [x] 解绑、注销账号、数据导出
-- [x] CI/CD、限流、审计、站内通知、指标
-- [x] 备份脚本与运维手册
-- [x] 日记图片上传（本地 / 阿里云 OSS）
-- [ ] 日记导出（长图 / PDF / 短视频）
+- [x] 骨架与三层架构、CI、限流、审计、指标
+- [x] 注册登录 / 情侣绑定 / 解绑 / 注销
+- [x] 金币、申请审批、商城
+- [x] 秘密树、日记、共同清单、账本
+- [x] 每日一问、纪念日、站内通知
+- [x] 模拟 TA（授权、RAG、多轮对话、工具确认）
+- [x] 图片上传（本地 / 阿里云 OSS）
+- [x] 前端（四视图 + 液态玻璃引擎 + Capacitor 工程）
 - [ ] 推送通知（厂商通道）
 - [ ] 运营后台
-- [ ] Chroma 向量检索
-- [ ] 前端
+- [ ] 日记导出（长图 / PDF）

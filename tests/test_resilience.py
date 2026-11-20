@@ -1,16 +1,11 @@
-"""可观测性与容错：请求 ID、熔断状态机、AI 降级。"""
+"""可观测性与容错：请求 ID、熔断状态机。"""
 
 import time
 
 import httpx
-import pytest
 
-from app.core.errors import AppError
 from app.main import app
-from app.modules.ai import client as ai_client
 from app.modules.ai.breaker import CLOSED, HALF_OPEN, OPEN, CircuitBreaker
-from app.modules.simta import service as simta_service
-from tests.helpers import seed_couple
 
 
 async def test_request_id_generated_and_echoed():
@@ -46,18 +41,3 @@ def test_breaker_half_opens_then_closes():
 
     breaker.record_success()
     assert breaker.current_state() == CLOSED
-
-
-async def test_simta_degrades_when_ai_unavailable(session, monkeypatch):
-    a, b, couple = await seed_couple(session)
-    await simta_service.set_consent(session, couple, b, True)
-
-    async def boom(*, system: str, user: str) -> str:
-        raise AppError("AI 服务暂时不可用", code=11003, status_code=503)
-
-    monkeypatch.setattr(ai_client, "complete", boom)
-
-    with pytest.raises(AppError) as exc:
-        await simta_service.chat(session, couple, a, "在吗")
-
-    assert exc.value.code == 14002

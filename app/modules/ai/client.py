@@ -28,12 +28,19 @@ breaker = CircuitBreaker(
 _MAX_ATTEMPTS = 2
 
 
+_CLIENT = None
+
+
 def _build_client() -> AsyncOpenAI:
-    return AsyncOpenAI(
-        api_key=settings.LLM_API_KEY,
-        base_url=settings.LLM_BASE_URL,
-        timeout=30.0,
-    )
+    """复用同一个客户端：新建会让每轮对话多一次 TCP/TLS 握手。"""
+    global _CLIENT
+    if _CLIENT is None:
+        _CLIENT = AsyncOpenAI(
+            api_key=settings.LLM_API_KEY,
+            base_url=settings.LLM_BASE_URL,
+            timeout=30.0,
+        )
+    return _CLIENT
 
 
 async def _call(messages: list[dict[str, str]]) -> str:

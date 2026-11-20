@@ -223,6 +223,7 @@ app/modules/<module>/
 - 同一件事的两种视角传同一个 `event_id`，查询时可按它取回两篇。
 - 标题、正文加密；情绪标签、地点、图片列表明文存储。
 - 图片只存对象 key，返回时生成可访问 URL。
+- 删除日记、或编辑时移除某张图，后端会清理对应的图片文件；清理前先确认没有别的日记仍在引用这个 key。
 - 创建支持 `idempotency_key`。
 - 创建 / 更新 / 删除后会异步同步向量索引，供 RAG 检索。
 
@@ -373,33 +374,30 @@ app/modules/<module>/
 - 第一次发生日在未来时，下一次就是该日期本身，不会倒推到今年。
 - 排序：未来事件由近到远；已经过去的一次性事件排在最后，最近的在前。
 - 自定义纪念日支持 `idempotency_key`。
-- 注销账号会删除该用户创建的纪念日并清空生日；数据导出包含纪念日。
+- 注销账号会删除该用户创建的纪念日并清空生日。
 
 表：`anniversaries`；`users` 增加 `birthday` 字段
 
 ### 2.13 模拟 TA
 
-基于历史记录模拟伴侣的说话方式。
+只管「能不能用对方的数据」和「用哪种口吻」，对话能力全在 Agent 模块。
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/api/v1/sim-ta` | 当前授权与忠实度状态 |
 | PUT | `/api/v1/sim-ta/consent` | 开启 / 撤销授权 |
 | PUT | `/api/v1/sim-ta/settings` | 切换忠实度 |
-| POST | `/api/v1/sim-ta/chat` | 和对方的分身对话（一次性返回） |
 
 规则：
 
-- 使用某人的数据前，必须本人授权；未授权时对话返回 403。
-- 撤销授权立即停用：删除派生画像和向量索引，并写审计日志。
+- 使用某人的数据前，必须本人授权。
+- 撤销授权立即停用：删除该用户在该关系下的向量索引，并写审计日志。
 - 两种模式：
   - `faithful`：只基于真实记录，不确定就说不知道，不编造。
   - `idealized`：更温柔，但禁止替真人做承诺。
-- 每次回复都带免责声明：这是模拟，不是本人。
-- 检索优先走 Chroma 向量相似度；未配置 embedding 时退回最近日记。
-- AI 不可用时返回温和提示，而不是技术错误。
+- 真正回复的那一轮由 `/agent/conversations/{id}/messages/stream` 承担，回复里带免责声明。
 
-表：`persona_consents`、`persona_settings`、`persona_profiles`
+表：`persona_consents`、`persona_settings`
 
 ### 2.14 AI Agent
 
@@ -412,6 +410,7 @@ app/modules/<module>/
 | GET | `/api/v1/agent/conversations/{id}` | 会话详情 |
 | DELETE | `/api/v1/agent/conversations/{id}` | 删除会话 |
 | POST | `/api/v1/agent/conversations/{id}/messages/stream` | 流式对话（SSE） |
+| POST | `/api/v1/agent/conversations/{id}/memorize` | 把最近几轮写成记忆块 |
 | POST | `/api/v1/agent/actions/{id}/confirm` | 确认写操作 |
 | POST | `/api/v1/agent/actions/{id}/cancel` | 取消写操作 |
 
@@ -429,31 +428,16 @@ app/modules/<module>/
 - 会话默认保留 30 天；每次新消息顺延；过期由 worker 清理。
 - 服务端最多带最近 10 轮历史；单次最多 5 轮工具调用。
 
-表：`agent_conversations`、`agent_messages`、`agent_actions`
+表：`agent_conversations`、`agent_messages`、`agent_actions`、`chat_memories`
 
-### 2.15 聊天记录导入
+### 2.15 对话记忆
 
-把历史聊天记录导入，用于生成说话风格画像和向量索引。
+不再导入历史聊天记录，只用 App 内聊出来的对话做长期记忆。
 
-| 方法 | 路径 | 说明 |
-|---|---|---|
-| POST | `/api/v1/agent/imports` | 上传并解析聊天记录 |
-| GET | `/api/v1/agent/imports` | 导入记录列表 |
-| GET | `/api/v1/agent/imports/{id}` | 单次导入详情 |
-| DELETE | `/api/v1/agent/imports/{id}` | 删除导入及其消息、画像、向量 |
-
-规则：
-
-- 支持 JSONL / JSON，单文件最大 20 MB、10 万条消息。
-- 必须双方都授权后才能导入。
-- 需要指定双方在文件里的昵称，服务端把发送人映射到用户。
-- 只识别到一方消息时拒绝导入，避免昵称填错导致口吻错位。
-- 以 `(couple_id, source_hash)` 去重，同一份文件重复导入不会产生重复消息。
-- 解析出的消息加密存储；原始文件不落盘。
-- 画像和向量索引由 worker 异步生成。
-- 注销账号时：本人上传的导入整条删除；对方导入中删除本人发言并重建索引。
-
-表：`chat_imports`、`chat_messages`
+- 前端离开会话时调 `memorize`，后台把最近 6 轮切块（每块 ≤320 字，最多 1000 条消息）写向量库。
+- 下一轮发言前按 `(couple_id, user_id)` 服务端过滤，取相似度最高的 3 块拼进 system prompt 的「你俩之前聊过的片段」段。
+- 块文本带日期前缀（如 `2026-11-10 周二`），模型不会把旧话当成今天。
+- 记忆写 PG 表 `chat_memories` + Chroma collection `cove_persona`；解绑时双方向量和该关系的记忆块一并清掉。
 
 ### 2.16 通知
 
@@ -473,9 +457,7 @@ app/modules/<module>/
 
 ### 2.17 审计
 
-| 方法 | 路径 | 说明 |
-|---|---|---|
-| GET | `/api/v1/audit` | 我的敏感操作记录 |
+只写不读：敏感操作留痕，不提供 HTTP 查询接口。
 
 记录范围包括：修改密码、撤销模拟 TA 授权、确认 / 取消 Agent 写操作、注销账号等。
 
@@ -502,17 +484,14 @@ app/modules/<module>/
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/api/v1/privacy/export` | 导出个人数据（JSON） |
 | POST | `/api/v1/privacy/delete` | 注销账号 |
-
-导出范围：资料、关系、日记、秘密、账本、清单、每日一问、纪念日、金币流水。
 
 注销流程：
 
 1. 重新校验密码。
 2. 解除当前关系。
-3. 删除个人内容：秘密、日记、账本、清单、每日一问、纪念日、模拟 TA 授权与画像、通知、审计、Agent 会话、聊天导入。
-4. 清理向量库索引；对方导入中删除本人发言并重建索引。
+3. 删除个人内容：秘密、日记、账本、清单、每日一问、纪念日、模拟 TA 授权、通知、审计、Agent 会话、对话记忆。
+4. 清理向量库索引。
 5. 匿名化用户行：手机号改为 `deleted-{id}`、密码随机化、昵称改为“已注销”、清空头像和生日、写入 `deleted_at`。
 6. 保留金币流水和商城订单，避免对方账目对不上。
 
@@ -520,7 +499,7 @@ app/modules/<module>/
 
 ## 3. 数据模型
 
-当前共 26 张业务表（数据库另有 1 张 `alembic_version`）。
+当前共 24 张业务表（数据库另有 1 张 `alembic_version`）。
 
 | 模块 | 表 |
 |---|---|
@@ -534,8 +513,8 @@ app/modules/<module>/
 | 商城 | `mall_items`、`mall_orders` |
 | 每日一问 | `daily_answers` |
 | 纪念日 | `anniversaries` |
-| 模拟 TA | `persona_consents`、`persona_settings`、`persona_profiles` |
-| Agent | `agent_conversations`、`agent_messages`、`agent_actions`、`chat_imports`、`chat_messages` |
+| 模拟 TA | `persona_consents`、`persona_settings` |
+| Agent | `agent_conversations`、`agent_messages`、`agent_actions`、`chat_memories` |
 | 向量索引 | `chunk_index` |
 | 通知 | `notifications` |
 | 审计 | `audit_logs` |
@@ -556,7 +535,7 @@ app/modules/<module>/
 - 算法：AES-256-GCM。
 - 密文格式：`v1:<base64>`。
 - 通过 SQLAlchemy `TypeDecorator` 自动加解密，业务代码无感知。
-- 覆盖字段：秘密正文、日记标题 / 正文、账本备注、每日一问答案、Agent 标题 / 消息 / 动作参数与结果、聊天消息、画像摘要与样例等。
+- 覆盖字段：秘密正文、日记标题 / 正文、账本备注、每日一问答案、Agent 标题 / 消息 / 动作参数与结果、对话记忆块等。
 
 ### 4.2 幂等
 
@@ -593,8 +572,7 @@ ARQ worker 负责：
 | `index_diary` | 重建日记向量索引 |
 | `delete_diary_vectors` | 删除日记向量 |
 | `delete_user_vectors` | 删除用户全部向量 |
-| `delete_chat_import_vectors` | 删除单次导入的向量 |
-| `process_chat_import` | 生成画像并建立聊天窗口索引 |
+| `index_conversation_memories` | 把会话最近几轮写成记忆块并建索引 |
 
 定时任务：
 
@@ -604,12 +582,13 @@ ARQ worker 负责：
 | 每天 03:41 | 清理燃尽期已过的秘密正文 |
 | 每天 04:07 | 清理过期 Agent 会话 |
 | 每天 04:17 | 过期未确认的 Agent 动作 |
+| 每天 04:37 | 补齐对话记忆索引 |
 
 ### 4.6 RAG 与向量检索
 
 - Chroma 作为向量库，PostgreSQL 是唯一真相，向量可重建。
 - 日记按字符切片，默认 400 字、重叠 50 字。
-- 聊天记录按对话窗口切片，每个窗口最多 4 条消息，且必须包含目标用户本人的发言。
+- 聊天记忆按对话块切片，每块最多 320 字、6 轮，单会话最多 1000 条消息。
 - 检索强制按 `couple_id + user_id` 过滤，避免拿错人的数据。
 - 内容未变化时按 hash 跳过 embedding，节省调用成本。
 - 未配置 embedding 时自动退回最近日记，不影响业务可用性。
@@ -618,7 +597,7 @@ ARQ worker 负责：
 
 - 模型和 embedding 均通过 OpenAI 兼容接口配置，不硬编码厂商。
 - 支持超时、重试、熔断（closed / open / half-open）和降级。
-- AI 不可用时，模拟 TA 返回温和提示，Agent 返回错误事件。
+- AI 不可用时，Agent 返回错误事件，前端提示稍后再试。
 - 调用次数、耗时、失败率写入 Prometheus 指标。
 
 ### 4.8 可观测性
@@ -648,14 +627,14 @@ ARQ worker 负责：
 | 5001–5004 | 秘密树 |
 | 6001–6004 | 金币申请 |
 | 7001–7011 | 商城 |
-| 8001–8003 | 日记 |
+| 8001–8004 | 日记（8004 = 正文与图片都为空） |
 | 9001–9003 | 清单 |
 | 10001–10004 | 账本 |
 | 11001–11003 | AI 调用不可用 |
-| 14001–14002 | 模拟 TA |
+| 14001 | 模拟 TA 未授权 |
 | 15001 | 注销账号密码错误 |
 | 16001–16004 | 上传 |
-| 17001–17013 | Agent / 聊天导入 |
+| 17001–17013 | Agent |
 | 18001 | 纪念日不存在 |
 
 完整的接口参数和响应结构以 FastAPI 自动生成的 `/docs`、`/openapi.json` 为准。
@@ -718,7 +697,6 @@ uv run arq app.worker.WorkerSettings
 - access token 是无状态 JWT，修改密码后旧 access token 在过期前（最长 30 分钟）仍然有效；refresh token 已全部吊销。
 - AI 熔断器是单进程的，多实例部署时各实例独立计数。
 - worker 的 cron 任务在每个实例都会运行，多实例部署时应拆成单独进程。
-- 聊天记录在请求内同步解析，超大文件会占用一个 API worker。
 - 备份目前只有脚本，没有定时执行和恢复演练。
 - 推送通知、内容审核、运营后台、CD 自动化尚未实现。
 - 争吵模式和询问中心已下线，相关表、接口、迁移和文档均已清理。
@@ -731,4 +709,4 @@ uv run arq app.worker.WorkerSettings
 uv run pytest
 ```
 
-当前共 146 个测试，覆盖认证、金币、秘密、日记、清单、账本、商城、每日一问、纪念日、模拟 TA、Agent、聊天导入、隐私、限流、幂等、加密、上传等模块。
+当前共 143 个测试，覆盖认证、金币、秘密、日记、清单、账本、商城、每日一问、纪念日、模拟 TA、Agent、对话记忆、隐私、限流、幂等、加密、上传等模块。

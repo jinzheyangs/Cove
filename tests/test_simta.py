@@ -1,97 +1,26 @@
-"""模拟TA：授权前置、忠实度提示词、撤销即停用。"""
+"""模拟TA：授权与偏好状态。"""
 
-import pytest
-from sqlalchemy import select
-
-from app.core.errors import AppError
-from app.modules.agent.models import PersonaProfile
-from app.modules.ai import client as ai_client
-from app.modules.diaries import service as diary_service
-from app.modules.diaries.schemas import DiaryCreate
 from app.modules.simta import service
 from tests.helpers import seed_couple
 
 
-async def test_chat_requires_partner_consent(session):
+async def test_state_defaults_to_idealized_and_unauthorized(session):
     a, _, couple = await seed_couple(session)
 
-    with pytest.raises(AppError) as exc:
-        await service.chat(session, couple, a, "在吗")
+    state = await service.get_state(session, couple, a)
 
-    assert exc.value.code == 14001
+    assert state.my_consent is False
+    assert state.partner_consent is False
+    assert state.fidelity == "idealized"
 
 
-async def test_chat_uses_partner_diary_as_context(session, monkeypatch):
+async def test_consent_roundtrip(session):
     a, b, couple = await seed_couple(session)
-    await diary_service.create(
-        session, couple, b, DiaryCreate(content="最近工作很累，想被抱一下")
-    )
+
     await service.set_consent(session, couple, b, True)
 
-    captured = {}
+    state = await service.get_state(session, couple, a)
 
-    async def fake_complete(*, system: str, user: str) -> str:
-        captured["system"] = system
-        captured["user"] = user
-        return "我在，抱一下。"
-
-    monkeypatch.setattr(ai_client, "complete", fake_complete)
-
-    result = await service.chat(session, couple, a, "今天怎么样")
-
-    assert result.reply == "我在，抱一下。"
-    assert result.disclaimer
-    assert "最近工作很累" in captured["user"]
-
-
-async def test_idealized_mode_forbids_promises(session, monkeypatch):
-    a, b, couple = await seed_couple(session)
-    await service.set_consent(session, couple, b, True)
-    await service.set_fidelity(session, couple, a, "idealized")
-
-    captured = {}
-
-    async def fake_complete(*, system: str, user: str) -> str:
-        captured["system"] = system
-        return "嗯"
-
-    monkeypatch.setattr(ai_client, "complete", fake_complete)
-    await service.chat(session, couple, a, "你会一直陪着我吗")
-
-    assert "理想" in captured["system"]
-    assert "不要替 TA 做出承诺" in captured["system"]
-
-
-async def test_revoking_consent_blocks_chat(session):
-    a, b, couple = await seed_couple(session)
-    await service.set_consent(session, couple, b, True)
-    await service.set_consent(session, couple, b, False)
-
-    with pytest.raises(AppError) as exc:
-        await service.chat(session, couple, a, "在吗")
-
-    assert exc.value.code == 14001
-
-
-async def test_revoking_consent_deletes_persona_profile(session):
-    a, b, couple = await seed_couple(session)
-    session.add(
-        PersonaProfile(
-            couple_id=couple.id,
-            user_id=b.id,
-            style_summary="说话很温柔",
-            samples_json="[]",
-            stats={},
-        )
-    )
-    await session.commit()
-
-    await service.set_consent(session, couple, b, False)
-
-    profile = await session.scalar(
-        select(PersonaProfile).where(
-            PersonaProfile.couple_id == couple.id,
-            PersonaProfile.user_id == b.id,
-        )
-    )
-    assert profile is None
+    # a 看到的是「对方 b 已授权」「我自己没授权」
+    assert state.partner_consent is True
+    assert state.my_consent is False

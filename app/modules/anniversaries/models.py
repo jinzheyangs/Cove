@@ -36,6 +36,17 @@ class Anniversary(Base):
     # 创建者只用于审计；纪念日本身是双方共享的
     created_by: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
     title: Mapped[str] = mapped_column(String(50))
+    # 自定义条目的细分类型：custom 普通日子 / wedding 结婚纪念日
+    # 只是文案与图标不同，计算逻辑完全一致；留 kind 是为了将来做婚礼专题页
+    kind: Mapped[str] = mapped_column(
+        String(16), default="custom", server_default="custom"
+    )
+    # 读数方向：countdown 数「还有几天到下一次」 / elapsed 数「从那天起已经多久」
+    # 生日、周年庆、未来的一次性事件是 countdown；
+    # 在一起、结婚、搬进新家这类「起点」是 elapsed
+    mode: Mapped[str] = mapped_column(
+        String(16), default="countdown", server_default="countdown"
+    )
     # 原始日期：比如在一起的那天、第一次旅行的那天
     date: Mapped[date_type] = mapped_column(Date)
     repeat_yearly: Mapped[bool] = mapped_column(

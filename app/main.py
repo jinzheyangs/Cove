@@ -6,12 +6,13 @@
 3. setup_tracing 必须在 app 和路由都配置好之后调用
 """
 
+import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy import text
@@ -27,11 +28,11 @@ from app.core.middleware import (
     SecurityHeadersMiddleware,
 )
 from app.core.queue import close_pool
+from app.core.redis import close_redis
 from app.core.storage import validate_storage_config
 from app.core.tracing import setup_tracing
 from app.modules.agent.router import router as agent_router
 from app.modules.anniversaries.router import router as anniversaries_router
-from app.modules.audit.router import router as audit_router
 from app.modules.bills.router import router as bills_router
 from app.modules.coin_applies.router import router as coin_applies_router
 from app.modules.coins.router import router as coins_router
@@ -39,6 +40,7 @@ from app.modules.couples.router import router as couples_router
 from app.modules.daily.router import router as daily_router
 from app.modules.diaries.router import router as diaries_router
 from app.modules.mall.router import router as mall_router
+from app.modules.mood.router import router as mood_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.privacy.router import router as privacy_router
 from app.modules.secrets.router import router as secrets_router
@@ -54,16 +56,27 @@ API_PREFIX = "/api/v1"
 configure_logging()
 
 
+async def _warm_ai() -> None:
+    """后台预热向量库连接。失败只记一笔，不影响任何请求。"""
+    from app.modules.ai import vectorstore
+
+    await asyncio.to_thread(vectorstore.warm)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """启动和关闭时的钩子。
 
     启动：生产环境检查加密密钥，缺失则直接拒绝启动（fail fast）
-    关闭：释放数据库连接池
+    关闭：释放数据库连接池和 Redis 连接
     """
     ensure_configured()
     validate_storage_config()
+    # 后台预热向量库：不解阻塞启动，只为第一句「模拟TA」少等一次建连
+    warm_task = asyncio.create_task(_warm_ai())
     yield
+    warm_task.cancel()
+    await close_redis()
     await close_pool()
     await engine.dispose()
 
@@ -106,8 +119,8 @@ app.include_router(mall_router, prefix=API_PREFIX)
 app.include_router(diaries_router, prefix=API_PREFIX)
 app.include_router(todos_router, prefix=API_PREFIX)
 app.include_router(bills_router, prefix=API_PREFIX)
-app.include_router(audit_router, prefix=API_PREFIX)
 app.include_router(daily_router, prefix=API_PREFIX)
+app.include_router(mood_router, prefix=API_PREFIX)
 app.include_router(anniversaries_router, prefix=API_PREFIX)
 app.include_router(simta_router, prefix=API_PREFIX)
 app.include_router(privacy_router, prefix=API_PREFIX)
@@ -147,3 +160,28 @@ async def metrics(request: Request) -> Response:
     ):
         return Response(status_code=403)
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+# ---- 前端同源托管 ----------------------------------------------------------
+# `cd frontend && npm run build` 之后，直接访问 http://localhost:8000/ 就是完整 App。
+# 路径相对仓库根解析，不依赖 uvicorn 的启动目录；dist 不存在时整段自动跳过，
+# 后端仍可作为纯 API 服务运行（开发时用 Vite 代理 /api 与 /uploads）。
+# 这一段必须排在所有业务路由之后：catch-all 不能抢掉 /api、/uploads、/docs 等。
+_FRONTEND_DIST = (Path(__file__).resolve().parent.parent / settings.FRONTEND_DIST).resolve()
+
+if _FRONTEND_DIST.is_dir():
+    _assets = _FRONTEND_DIST / "assets"
+    if _assets.is_dir():
+        app.mount("/assets", StaticFiles(directory=_assets), name="frontend-assets")
+
+    @app.get("/{spa_path:path}", include_in_schema=False)
+    async def spa_fallback(spa_path: str) -> Response:
+        """SPA 只有一个入口；未知的非 API 路径一律回 index.html。"""
+        if spa_path.startswith(
+            ("api/", "uploads/", "assets/", "health", "metrics", "docs", "redoc", "openapi.json")
+        ):
+            return Response(status_code=404)
+        index = _FRONTEND_DIST / "index.html"
+        if not index.is_file():
+            return Response(status_code=404)
+        return FileResponse(index, media_type="text/html")

@@ -1,4 +1,4 @@
-"""秘密树：定价、扣币摘取、燃尽、销毁权限。"""
+"""秘密树：定价、扣币摘取、读完即销毁、销毁权限。"""
 
 import pytest
 
@@ -59,46 +59,27 @@ async def test_insufficient_balance_keeps_secret_active(session):
     assert await coin_repo.get_balance(session, b_id) == 5
 
 
-async def test_burn_after_read_cannot_be_reopened(session):
+async def test_read_once_then_destroyed(session):
+    """读完即销毁：正文只在这一次响应里给出，库里内容清空，不可能再读第二次。"""
     a, b, couple = await seed_couple(session)
     await fund_user(session, couple, b, 100)
     secret = await service.publish(
-        session,
-        couple,
-        a,
-        SecretCreate(content="只给你看一次", cost_coins=10, is_burn_after_read=True),
+        session, couple, a, SecretCreate(content="只给你看一次", cost_coins=10)
     )
+    secret_id = secret.id
 
-    first = await service.unlock(session, couple, b, secret.id)
-    assert first.status == "burned"
+    first = await service.unlock(session, couple, b, secret_id)
+    assert first.status == "destroyed"
+    assert first.content == "只给你看一次"
+    assert await coin_repo.get_balance(session, b.id) == 90
+
+    await session.refresh(secret)
+    assert secret.status == "destroyed"
+    assert secret.content == ""   # 正文已抹掉
 
     with pytest.raises(AppError) as exc:
-        await service.unlock(session, couple, b, secret.id)
+        await service.unlock(session, couple, b, secret_id)
     assert exc.value.code == 5003
 
-
-async def test_second_unlock_of_normal_secret_is_free(session):
-    a, b, couple = await seed_couple(session)
-    await fund_user(session, couple, b, 100)
-    secret = await service.publish(
-        session, couple, a, SecretCreate(content="可以反复看", cost_coins=20)
-    )
-
-    await service.unlock(session, couple, b, secret.id)
-    await service.unlock(session, couple, b, secret.id)
-
-    assert await coin_repo.get_balance(session, b.id) == 80
-
-
-async def test_destroy_all_only_touches_my_secrets(session):
-    a, b, couple = await seed_couple(session)
-    mine = await service.publish(session, couple, a, SecretCreate(content="我的"))
-    theirs = await service.publish(session, couple, b, SecretCreate(content="对方的"))
-
-    count = await service.destroy_all_mine(session, couple, a)
-
-    assert count == 1
-    await session.refresh(mine)
-    await session.refresh(theirs)
-    assert mine.status == "destroyed"
-    assert theirs.status == "active"
+    # 第二次被拒时不能再扣币
+    assert await coin_repo.get_balance(session, b.id) == 90

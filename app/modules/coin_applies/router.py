@@ -21,15 +21,22 @@ async def create_apply(
     body: ApplyCreate, user: CurrentUser, couple: CurrentCouple, session: SessionDep
 ) -> Envelope[ApplyOut]:
     """发起申请。对方会在 /pending 里看到。"""
-    item = await service.apply(session, couple, user, body.amount, body.reason)
-    return Envelope(data=ApplyOut.model_validate(item))
+    item = await service.apply(
+        session,
+        couple,
+        user,
+        body.amount,
+        body.reason,
+        body.evidence_key,
+    )
+    return Envelope(data=service.to_out(item))
 
 
 @router.get("", response_model=Envelope[list[ApplyOut]])
 async def list_mine(user: CurrentUser, session: SessionDep) -> Envelope[list[ApplyOut]]:
     """我发起过的申请（所有状态）。"""
     items = await service.list_mine(session, user)
-    return Envelope(data=[ApplyOut.model_validate(i) for i in items])
+    return Envelope(data=[service.to_out(i) for i in items])
 
 
 @router.get("/pending", response_model=Envelope[list[ApplyOut]])
@@ -38,7 +45,7 @@ async def list_pending(
 ) -> Envelope[list[ApplyOut]]:
     """对方发起的、等我审批的申请。"""
     items = await service.list_pending_for_me(session, couple, user)
-    return Envelope(data=[ApplyOut.model_validate(i) for i in items])
+    return Envelope(data=[service.to_out(i) for i in items])
 
 
 @router.post("/{apply_id}/approve", response_model=Envelope[ApplyOut])
@@ -51,7 +58,7 @@ async def approve(
 ) -> Envelope[ApplyOut]:
     """通过申请，可附带调整后的金额。"""
     item = await service.approve(session, couple, user, apply_id, body.amount, body.remark)
-    return Envelope(data=ApplyOut.model_validate(item))
+    return Envelope(data=service.to_out(item))
 
 
 @router.post("/{apply_id}/reject", response_model=Envelope[ApplyOut])
@@ -64,4 +71,4 @@ async def reject(
 ) -> Envelope[ApplyOut]:
     """拒绝申请，可附理由。"""
     item = await service.reject(session, couple, user, apply_id, body.remark)
-    return Envelope(data=ApplyOut.model_validate(item))
+    return Envelope(data=service.to_out(item))

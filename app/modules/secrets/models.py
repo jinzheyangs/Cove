@@ -1,9 +1,9 @@
 """秘密树表结构。
 
 一条秘密的生命周期：
-    active --(被摘取且设置了阅后即焚)--> burned --(24h 后)--> 内容清空
-    active --(作者主动销毁)------------> destroyed
+    active --(被摘取，读完即销毁)--> destroyed
 
+没有「阅后即焚」这个可选项了：只有一种规则，摘下来看完，这一片就不存在了。
 content 使用 EncryptedText，数据库里是密文。
 """
 
@@ -11,7 +11,6 @@ from datetime import datetime
 
 from sqlalchemy import (
     BigInteger,
-    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -30,6 +29,7 @@ class Secret(Base):
 
     作者发布后，对方需要花金币才能摘取。
     作者自己不能摘取自己的秘密。
+    摘取即销毁：对方看到的只有那一次。
     """
 
     __tablename__ = "secrets"
@@ -44,11 +44,7 @@ class Secret(Base):
     level: Mapped[str] = mapped_column(String(20), default="normal", server_default="normal")
     # 摘取需要消耗的金币，由作者设定
     cost_coins: Mapped[int] = mapped_column(BigInteger)
-    # 读完后是否标记为已燃尽
-    is_burn_after_read: Mapped[bool] = mapped_column(
-        Boolean, default=False, server_default="false"
-    )
-    # active / burned / destroyed
+    # active：还挂在树上 / destroyed：已经被摘走或作者销毁
     status: Mapped[str] = mapped_column(String(20), default="active", server_default="active")
     # 谁摘取过、什么时候。只有两个人，所以单字段足够
     viewed_by: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("users.id"))
@@ -60,7 +56,7 @@ class Secret(Base):
     __table_args__ = (
         CheckConstraint("level IN ('normal', 'deep')", name="ck_secrets_level"),
         CheckConstraint(
-            "status IN ('active', 'burned', 'destroyed')", name="ck_secrets_status"
+            "status IN ('active', 'destroyed')", name="ck_secrets_status"
         ),
         CheckConstraint("cost_coins > 0", name="ck_secrets_cost_positive"),
         # 「对方可摘取列表」按 couple + status 过滤

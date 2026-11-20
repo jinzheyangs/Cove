@@ -28,7 +28,6 @@ async def publish(
             id=secret.id,
             level=secret.level,
             cost_coins=secret.cost_coins,
-            is_burn_after_read=secret.is_burn_after_read,
             status=secret.status,
             authored_by_me=True,
             viewed=False,
@@ -69,12 +68,3 @@ async def destroy(
     """销毁单条。只能销毁自己发布的。"""
     await service.destroy(session, couple, user, secret_id)
     return Envelope()
-
-
-@router.delete("", response_model=Envelope[dict])
-async def destroy_all(
-    user: CurrentUser, couple: CurrentCouple, session: SessionDep
-) -> Envelope[dict]:
-    """一键销毁自己发布的全部秘密，不碰对方的。"""
-    count = await service.destroy_all_mine(session, couple, user)
-    return Envelope(data={"destroyed": count})

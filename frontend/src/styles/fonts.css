@@ -1,0 +1,77 @@
+/* Inter 自托管：登录 / 注册 / 验证码 / 设置 都用它，别让系统字体替换掉 */
+@font-face{
+  font-family:'Inter';
+  font-style:normal;
+  font-weight:400;
+  font-display:swap;
+  src:url('/fonts/inter-400.woff2') format('woff2');
+}
+@font-face{
+  font-family:'Inter';
+  font-style:normal;
+  font-weight:500;
+  font-display:swap;
+  src:url('/fonts/inter-500.woff2') format('woff2');
+}
+@font-face{
+  font-family:'Inter';
+  font-style:normal;
+  font-weight:600;
+  font-display:swap;
+  src:url('/fonts/inter-600.woff2') format('woff2');
+}
+@font-face{
+  font-family:'Inter';
+  font-style:normal;
+  font-weight:700;
+  font-display:swap;
+  src:url('/fonts/inter-700.woff2') format('woff2');
+}
+@font-face{
+  font-family:'Inter';
+  font-style:normal;
+  font-weight:800;
+  font-display:swap;
+  src:url('/fonts/inter-800.woff2') format('woff2');
+}
+@font-face{
+  font-family:'Inter';
+  font-style:normal;
+  font-weight:900;
+  font-display:swap;
+  src:url('/fonts/inter-900.woff2') format('woff2');
+}
+
+/* Poppins 自托管：日记详情 / 发布页的几何无衬线，与参考稿一致。只含 latin，中文走系统字 */
+@font-face{
+  font-family:'Poppins';
+  font-style:normal;
+  font-weight:400;
+  font-display:swap;
+  src:url('/fonts/poppins-400.woff2') format('woff2');
+  unicode-range:U+0020-007E, U+00A0-00FF, U+2000-206F;
+}
+@font-face{
+  font-family:'Poppins';
+  font-style:normal;
+  font-weight:500;
+  font-display:swap;
+  src:url('/fonts/poppins-500.woff2') format('woff2');
+  unicode-range:U+0020-007E, U+00A0-00FF, U+2000-206F;
+}
+@font-face{
+  font-family:'Poppins';
+  font-style:normal;
+  font-weight:600;
+  font-display:swap;
+  src:url('/fonts/poppins-600.woff2') format('woff2');
+  unicode-range:U+0020-007E, U+00A0-00FF, U+2000-206F;
+}
+@font-face{
+  font-family:'Poppins';
+  font-style:normal;
+  font-weight:700;
+  font-display:swap;
+  src:url('/fonts/poppins-700.woff2') format('woff2');
+  unicode-range:U+0020-007E, U+00A0-00FF, U+2000-206F;
+}

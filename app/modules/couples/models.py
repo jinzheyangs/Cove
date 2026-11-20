@@ -5,11 +5,12 @@
 - active 状态上的部分唯一索引：一个人同时只能有一段关系
 """
 
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import (
     BigInteger,
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -54,7 +55,7 @@ class Couple(Base):
     这样 (A,B) 和 (B,A) 不可能同时存在。
 
     解除绑定只改 status，不删数据：
-    双方的日记、秘密、账目仍然保留，可以导出。
+    双方的日记、秘密、账目仍然保留。
     """
 
     __tablename__ = "couples"
@@ -68,6 +69,15 @@ class Couple(Base):
     )
     bind_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+    # 「在一起」的起始日，由用户在引导页填写；为空时退回 bind_at 的日期。
+    # 绑定动作的时间往往不是真正的相识日，所以单独存一列。
+    start_date: Mapped[date | None] = mapped_column(Date, default=None)
+    # 发起这段关系的人（生成邀请码的人）。
+    # 用途：绑定后的「填在一起那天」只该问一次 —— 问发起人，别让被邀请的人
+    # 再填一遍同一个日期。老数据为 NULL，前端按原行为处理。
+    created_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id"), default=None
     )
     unbound_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(

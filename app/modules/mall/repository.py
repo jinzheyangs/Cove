@@ -19,7 +19,7 @@ async def create_item(
     price_coins: int,
     max_orders: int | None = None,
 ) -> MallItem:
-    """插入商品，初始状态是 pending。"""
+    """插入商品。上架无需审批，直接落成 approved（由模型默认值给出）。"""
     item = MallItem(
         couple_id=couple_id,
         creator_id=creator_id,

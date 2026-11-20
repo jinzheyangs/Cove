@@ -65,24 +65,6 @@ async def test_upload_rejects_too_large(session, local_storage, monkeypatch):
     assert exc.value.code == 16002
 
 
-async def test_delete_removes_own_file(session, local_storage):
-    _, _, couple = await seed_couple(session)
-    result = await upload_service.upload_diary_image(couple, "image/png", PNG_BYTES)
-
-    await upload_service.delete_upload(couple, result.key)
-
-    assert not (local_storage.root / result.key).exists()
-
-
-async def test_cannot_delete_other_couples_file(session, local_storage):
-    _, _, couple = await seed_couple(session)
-
-    with pytest.raises(AppError) as exc:
-        await upload_service.delete_upload(couple, "couples/999/diaries/x.jpg")
-
-    assert exc.value.code == 16004
-
-
 async def test_diary_exposes_display_urls(session, local_storage):
     a, _, couple = await seed_couple(session)
     key = f"couples/{couple.id}/diaries/photo.jpg"

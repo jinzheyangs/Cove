@@ -109,13 +109,14 @@ async def upload_avatar(
     )
 
 
-async def delete_upload(couple: Couple, key: str) -> None:
-    """删除自己关系内的图片。
+async def upload_evidence(
+    couple: Couple, user_id: int, content_type: str | None, data: bytes
+) -> UploadOut:
+    """上传一张金币申请（索要）的照片证明。
 
-    key 必须以当前 couple 前缀开头，否则视为越权。
+    key 带 user_id，用途标 evidence；返回 key 后由前端放进
+    /coin-applies 的 evidence_key，url 只用于预览。
     """
-    prefix = f"couples/{couple.id}/"
-    if not key.startswith(prefix):
-        raise AppError("无权删除这个文件", code=16004, status_code=403)
-
-    await asyncio.to_thread(get_storage().delete, key)
+    return await _upload(
+        couple, content_type, data, purpose="evidence", user_id=user_id
+    )

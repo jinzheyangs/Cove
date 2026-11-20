@@ -1,7 +1,7 @@
 """业务层：商城的上下架、购买与核销。
 
 两个关键约束：
-1. 不能审批/购买自己上架的商品——否则金币经济失去意义
+1. 不能购买自己上架的商品——否则金币经济失去意义
 2. 购买时扣币、建订单、发通知在同一个事务里，不会出现扣了钱没订单
 """
 
@@ -23,9 +23,9 @@ from app.modules.users.models import User
 async def create_item(
     session: AsyncSession, couple: Couple, creator: User, body: ItemCreate
 ) -> MallItem:
-    """上架商品，进入待审批状态。
+    """上架商品，提交后直接处于 approved 状态，无需对方审批。
 
-    创建者只是提出建议价，最终价格需要对方确认。
+    价格以创建者填写的 price_coins 为准。
     """
     item = await repo.create_item(
         session,
@@ -49,63 +49,8 @@ async def list_items(session: AsyncSession, couple: Couple) -> list[MallItem]:
 async def list_my_items(
     session: AsyncSession, couple: Couple, user: User
 ) -> list[MallItem]:
-    """我上架的商品，包含待审批和被拒绝的，方便查看状态。"""
+    """我上架的商品，包含已上架和已下架的，方便查看状态。"""
     return await repo.list_by_creator(session, couple.id, user.id)
-
-
-async def _get_pending_item_for_review(
-    session: AsyncSession, couple: Couple, reviewer: User, item_id: int
-) -> MallItem:
-    """审批前的统一校验。
-
-    加锁 + 四件事：存在、属于当前关系、不是自己、状态仍是 pending。
-    """
-    item = await repo.get_item_for_update(session, item_id)
-    if item is None or item.couple_id != couple.id:
-        raise AppError("商品不存在", code=7001, status_code=404)
-    if item.creator_id == reviewer.id:
-        raise AppError("不能审批自己上架的商品", code=7002, status_code=403)
-    if item.status != "pending":
-        raise AppError("这个商品已经处理过了", code=7003, status_code=409)
-    return item
-
-
-async def approve_item(
-    session: AsyncSession,
-    couple: Couple,
-    reviewer: User,
-    item_id: int,
-    price_coins: int | None = None,
-) -> MallItem:
-    """审批通过并确定最终价格。
-
-    price_coins 为空时沿用创建者的建议价；
-    传了就以审批人的价格上架。
-    """
-    item = await _get_pending_item_for_review(session, couple, reviewer, item_id)
-    item.status = "approved"
-    item.approver_id = reviewer.id
-    item.approved_price = price_coins or item.price_coins
-    await session.commit()
-    await session.refresh(item)
-    return item
-
-
-async def reject_item(
-    session: AsyncSession,
-    couple: Couple,
-    reviewer: User,
-    item_id: int,
-    reason: str | None = None,
-) -> MallItem:
-    """拒绝上架。reason 会展示给创建者。"""
-    item = await _get_pending_item_for_review(session, couple, reviewer, item_id)
-    item.status = "rejected"
-    item.approver_id = reviewer.id
-    item.reject_reason = reason
-    await session.commit()
-    await session.refresh(item)
-    return item
 
 
 async def offline_item(
@@ -128,6 +73,32 @@ async def offline_item(
     return item
 
 
+async def edit_item(
+    session: AsyncSession,
+    couple: Couple,
+    user: User,
+    item_id: int,
+    body: ItemCreate,
+) -> MallItem:
+    """创建者编辑商品，保存后直接生效，保持 approved。
+
+    进行中的订单带有成交价快照，不会被这里的改动影响。
+    """
+    item = await repo.get_item_for_update(session, item_id)
+    if item is None or item.couple_id != couple.id:
+        raise AppError("商品不存在", code=7001, status_code=404)
+    if item.creator_id != user.id:
+        raise AppError("只能修改自己上架的商品", code=7004, status_code=403)
+
+    item.title = body.title
+    item.description = body.description
+    item.price_coins = body.price_coins
+    item.max_orders = body.max_orders
+    await session.commit()
+    await session.refresh(item)
+    return item
+
+
 async def buy(
     session: AsyncSession,
     couple: Couple,
@@ -138,7 +109,7 @@ async def buy(
     """用金币兑换商品。
 
     顺序很重要：
-    1. 锁商品行（和审批、下架互斥）
+    1. 锁商品行（和下架互斥）
     2. 校验状态、不能买自己的、库存
     3. 扣币（spend_locked，不提交）
     4. 建订单、发通知
@@ -167,8 +138,8 @@ async def buy(
         if ordered >= item.max_orders:
             raise AppError("这件商品已经兑换完了", code=7011, status_code=409)
 
-    # 有最终价就用最终价，否则用建议价；价格在这里快照进订单
-    price = item.approved_price or item.price_coins
+    # 价格直接用商品价，并在这里快照进订单
+    price = item.price_coins
     buyer_id = buyer.id
 
     try:
@@ -247,6 +218,62 @@ async def complete_order(
         related_id=order.id,
     )
     await session.commit()
+    await session.refresh(order)
+    return order
+
+
+async def cancel_order(
+    session: AsyncSession, couple: Couple, user: User, order_id: int
+) -> MallOrder:
+    """买家取消待兑现订单，金币原路退回。
+
+    权限和状态：
+    - 只有买家本人能取消，服务方没有这个入口（403）
+    - 只能取消 pending 订单；已完成 / 已取消的再点会 409，天然防重复
+
+    退款用 mint_locked 把下单时销毁的金币等额重新发行给买家，
+    和订单状态变更放在同一个事务里，不会出现“订单取消了但币没回来”。
+    """
+    order = await repo.get_order_for_update(session, order_id)
+    if order is None or order.couple_id != couple.id:
+        raise AppError("订单不存在", code=7008, status_code=404)
+    if order.status != "pending":
+        raise AppError("这个订单已经处理过了", code=7009, status_code=409)
+    if order.buyer_id != user.id:
+        raise AppError("只有买家本人可以取消订单", code=7012, status_code=403)
+
+    item = await repo.get_item(session, order.item_id)
+    try:
+        await coin_service.mint_locked(
+            session,
+            couple_id=couple.id,
+            actor_id=user.id,
+            recipient_id=order.buyer_id,
+            amount=order.price,
+            tx_type="reward",
+            ref_type="mall_order",
+            ref_id=order.id,
+            remark="订单取消退款",
+        )
+        order.status = "cancelled"
+        if item is not None:
+            await notification_service.notify(
+                session,
+                user_id=item.creator_id,
+                type="mall.order_cancelled",
+                title="对方取消了一笔兑换",
+                content=item.title,
+                related_type="mall_order",
+                related_id=order.id,
+            )
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        raise
+    except AppError:
+        await session.rollback()
+        raise
+
     await session.refresh(order)
     return order
 

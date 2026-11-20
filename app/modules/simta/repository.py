@@ -46,19 +46,3 @@ async def get_settings(
             PersonaSettings.owner_id == owner_id,
         )
     )
-
-
-async def upsert_settings(
-    session: AsyncSession, couple_id: int, owner_id: int, fidelity: str
-) -> PersonaSettings:
-    """写入或更新忠实度偏好。"""
-    settings = await get_settings(session, couple_id, owner_id)
-    if settings is None:
-        settings = PersonaSettings(
-            couple_id=couple_id, owner_id=owner_id, fidelity=fidelity
-        )
-        session.add(settings)
-    else:
-        settings.fidelity = fidelity
-    await session.flush()
-    return settings

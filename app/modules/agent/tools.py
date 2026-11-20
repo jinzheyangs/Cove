@@ -182,7 +182,7 @@ async def _list_mall_items(session, couple, user, target_id, args) -> dict:
             {
                 "id": item.id,
                 "title": item.title,
-                "price": item.approved_price or item.price_coins,
+                "price": item.price_coins,
             }
             for item in items[:20]
         ]
@@ -302,7 +302,7 @@ async def _propose_buy_mall_item(
     if item is None or item.couple_id != couple.id or item.status != "approved":
         return {"error": "商品不存在或未上架"}
 
-    price = item.approved_price or item.price_coins
+    price = item.price_coins
     action = await actions.create_pending(
         session,
         conversation,

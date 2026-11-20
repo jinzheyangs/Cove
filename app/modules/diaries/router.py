@@ -41,15 +41,6 @@ async def list_diaries(
     return Envelope(data=[service.to_out(d) for d in diaries])
 
 
-@router.get("/{diary_id}", response_model=Envelope[DiaryOut])
-async def get_one(
-    diary_id: int, couple: CurrentCouple, session: SessionDep
-) -> Envelope[DiaryOut]:
-    """读取单篇。只能读到本关系内的日记。"""
-    diary = await service.get_one(session, couple, diary_id)
-    return Envelope(data=service.to_out(diary))
-
-
 @router.put("/{diary_id}", response_model=Envelope[DiaryOut])
 async def update(
     diary_id: int,

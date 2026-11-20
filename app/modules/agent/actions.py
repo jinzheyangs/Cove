@@ -12,7 +12,7 @@
 import json
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import delete, update
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
@@ -50,10 +50,6 @@ async def create_pending(
     await session.commit()
     await session.refresh(action)
     return action
-
-
-async def get_action(session: AsyncSession, action_id: int) -> AgentAction | None:
-    return await session.get(AgentAction, action_id)
 
 
 async def _get_owned(
@@ -131,16 +127,6 @@ async def cancel(
     await session.commit()
     await session.refresh(action)
     return action
-
-
-async def delete_for_conversation(
-    session: AsyncSession, conversation_id: int
-) -> None:
-    """删除会话时一并清理它的待确认动作。"""
-    await session.execute(
-        delete(AgentAction).where(AgentAction.conversation_id == conversation_id)
-    )
-    await session.flush()
 
 
 async def _execute(

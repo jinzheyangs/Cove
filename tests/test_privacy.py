@@ -1,4 +1,4 @@
-"""隐私：解绑、注销匿名化、数据导出。"""
+"""隐私：解绑、注销匿名化。"""
 
 from datetime import UTC, datetime, timedelta
 
@@ -6,13 +6,7 @@ import pytest
 from sqlalchemy import func, select
 
 from app.core.errors import AppError
-from app.modules.agent.models import (
-    AgentConversation,
-    AgentMessage,
-    ChatImport,
-    ChatMessage,
-    PersonaProfile,
-)
+from app.modules.agent.models import AgentConversation, AgentMessage, ChatMemory
 from app.modules.couples import service as couple_service
 from app.modules.diaries import service as diary_service
 from app.modules.diaries.schemas import DiaryCreate
@@ -69,7 +63,7 @@ async def test_delete_account_anonymizes_and_purges(session):
     assert await diary_service.list_diaries(session, couple) == []
 
 
-async def test_delete_account_purges_agent_and_chat_data(session):
+async def test_delete_account_purges_agent_data(session):
     a, b, couple = await seed_couple(session)
 
     # Agent 会话 + 消息
@@ -88,88 +82,13 @@ async def test_delete_account_purges_agent_and_chat_data(session):
             content="只有我知道的话",
         )
     )
-
-    # 本人上传的导入 + 双方消息
-    own_import = ChatImport(
-        couple_id=couple.id,
-        uploaded_by=a.id,
-        filename="mine.jsonl",
-        format="jsonl",
-    )
-    session.add(own_import)
-    await session.flush()
-    session.add_all(
-        [
-            ChatMessage(
-                couple_id=couple.id,
-                import_id=own_import.id,
-                sender_id=a.id,
-                sender_name="A",
-                sent_at=datetime.now(UTC),
-                content="A 的私聊",
-                source_hash="hash-a-1",
-            ),
-            ChatMessage(
-                couple_id=couple.id,
-                import_id=own_import.id,
-                sender_id=b.id,
-                sender_name="B",
-                sent_at=datetime.now(UTC),
-                content="B 的私聊",
-                source_hash="hash-b-1",
-            ),
-        ]
-    )
-
-    # 对方上传的导入，里面也有本人的发言
-    partner_import = ChatImport(
-        couple_id=couple.id,
-        uploaded_by=b.id,
-        filename="theirs.jsonl",
-        format="jsonl",
-    )
-    session.add(partner_import)
-    await session.flush()
-    session.add_all(
-        [
-            ChatMessage(
-                couple_id=couple.id,
-                import_id=partner_import.id,
-                sender_id=a.id,
-                sender_name="A",
-                sent_at=datetime.now(UTC),
-                content="我在对方导入里的话",
-                source_hash="hash-a-2",
-            ),
-            ChatMessage(
-                couple_id=couple.id,
-                import_id=partner_import.id,
-                sender_id=b.id,
-                sender_name="B",
-                sent_at=datetime.now(UTC),
-                content="对方自己的话",
-                source_hash="hash-b-2",
-            ),
-        ]
-    )
-
-    # 派生的画像与刷新令牌
-    session.add(
-        PersonaProfile(
-            couple_id=couple.id,
-            user_id=a.id,
-            style_summary="说话简短",
-            samples_json="[]",
-            stats={},
-        )
-    )
     await user_service.issue_tokens(session, a)
     await session.commit()
 
     a_id = a.id
     await privacy_service.delete_account(session, a, TEST_PASSWORD)
 
-    # 本人的 Agent 会话、画像、刷新令牌都清掉
+    # 本人的 Agent 会话、消息、刷新令牌都清掉
     assert (
         await session.scalar(
             select(func.count())
@@ -186,7 +105,6 @@ async def test_delete_account_purges_agent_and_chat_data(session):
         )
         == 0
     )
-    assert await _count(session, PersonaProfile) == 0
     assert (
         await session.scalar(
             select(func.count())
@@ -196,34 +114,35 @@ async def test_delete_account_purges_agent_and_chat_data(session):
         == 0
     )
 
-    # 本人上传的导入整条删除；对方导入保留，但本人的发言被删掉
-    assert await _count(session, ChatImport) == 1
-    remaining = await session.get(ChatImport, partner_import.id)
-    assert remaining is not None
+
+async def test_delete_account_purges_chat_memory(session):
+    """注销之后「我跟分身聊过什么」不该留在库里。
+
+    chat_memories 故意没挂会话外键（会话 30 天清、记忆要留更久），
+    所以它只能靠注销流程显式清理。
+    """
+    a, b, couple = await seed_couple(session)
+    session.add(
+        ChatMemory(
+            couple_id=couple.id,
+            owner_id=a.id,
+            target_id=b.id,
+            conversation_id=1,
+            day=datetime.now(UTC).date(),
+            seq=0,
+            text="今天和分身聊了很多",
+        )
+    )
+    await session.commit()
+
+    a_id = a.id
+    await privacy_service.delete_account(session, a, TEST_PASSWORD)
+
     assert (
         await session.scalar(
             select(func.count())
-            .select_from(ChatMessage)
-            .where(ChatMessage.sender_id == a_id)
+            .select_from(ChatMemory)
+            .where(ChatMemory.owner_id == a_id)
         )
         == 0
     )
-    assert (
-        await session.scalar(
-            select(func.count())
-            .select_from(ChatMessage)
-            .where(ChatMessage.import_id == partner_import.id)
-        )
-        == 1
-    )
-
-
-async def test_export_includes_own_content(session):
-    a, _, couple = await seed_couple(session)
-    await diary_service.create(session, couple, a, DiaryCreate(content="要导出的日记"))
-
-    data = await privacy_service.export_data(session, a)
-
-    assert data["profile"]["id"] == a.id
-    assert data["diaries"][0]["content"] == "要导出的日记"
-    assert data["couple"]["id"] == couple.id

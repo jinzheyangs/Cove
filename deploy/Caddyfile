@@ -1,0 +1,24 @@
+# Cove 生产反代配置（Caddy）。
+# 域名从环境变量 DOMAIN 读取，由 compose 注入（值写在 .env）。
+# 没有域名 / 内网试部署：DOMAIN=:80，只跑 HTTP，不申请证书。
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# 本地上传的图片直接由 Caddy 从磁盘发，不经过 Python。
+	# 走 OSS 时前端拿到的是 OSS 地址，不会进这里，配置留着也无害。
+	handle_path /uploads/* {
+		root * /srv/uploads
+		file_server
+	}
+
+	# AI 服务是独立进程（agent），单独转发
+	handle /api/v1/agent* {
+		reverse_proxy agent:8100
+	}
+
+	# 其余全部交给业务后端：前端静态文件、业务接口、/docs
+	handle {
+		reverse_proxy api:8000
+	}
+}

@@ -55,8 +55,19 @@ def ensure_configured() -> None:
 
     在 app/main.py 的 lifespan 里调用。
     """
-    if settings.ENV == "prod" and not settings.DATA_ENCRYPTION_KEY:
+    # ENV 拼错（production / PROD）会静默跳过下面所有生产校验，
+    # 变成「以为上了生产、其实跑在开发配置里」，所以先卡住取值。
+    if settings.ENV not in ("dev", "ci", "prod"):
+        raise RuntimeError(
+            f"ENV 只支持 dev / ci / prod，当前是 {settings.ENV!r}"
+        )
+    if settings.ENV != "prod":
+        return
+    if not settings.DATA_ENCRYPTION_KEY:
         raise RuntimeError("生产环境必须配置 DATA_ENCRYPTION_KEY")
+    if settings.JWT_SECRET in ("", "change-me"):
+        # 默认值意味着任何人都能自己签一个 token 冒充任意用户
+        raise RuntimeError("生产环境必须把 JWT_SECRET 换成随机值（openssl rand -hex 32）")
 
 
 def encrypt(plaintext: str | None) -> str | None:

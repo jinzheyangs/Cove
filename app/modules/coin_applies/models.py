@@ -40,6 +40,8 @@ class CoinApply(Base):
     amount: Mapped[int] = mapped_column(BigInteger)
     # 做了什么、为什么值得这些金币
     reason: Mapped[str] = mapped_column(Text)
+    # 照片证明在对象存储里的 key（选填）；约定存 key 不存 url，展示时用 storage 拼 url
+    evidence_key: Mapped[str | None] = mapped_column(String(300))
     status: Mapped[str] = mapped_column(
         String(20), default="pending", server_default="pending"
     )

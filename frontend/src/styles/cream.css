@@ -1,0 +1,147 @@
+/* ============================================================
+   全息奶油：详情页共用的设计基元
+   与「我们」页同一套语言：奶油底、黏土圆角、柔光、没有硬边框
+   所有类名以 cr- 开头，避免和 app.css 撞车
+   ============================================================ */
+
+.cr-page{
+  --cream:#FFF7F2;
+  --cream2:#FFF0E9;
+  --ink:#2C1B2E;
+  --ink2:#6A5570;
+  --ink3:#9B87A1;
+  --pink:#FF8FB8;
+  --peach:#FFB489;
+  --lilac:#B69CFF;
+  --mint:#5FDCC0;
+  --sun:#FFD36E;
+  --sky:#8FB8FF;
+  --line:rgba(140,90,130,.10);
+  --shadow:0 16px 32px -20px rgba(110,50,100,.32), 0 4px 10px -6px rgba(110,50,100,.14);
+  --shadow-lg:0 26px 50px -26px rgba(150,70,130,.42), 0 8px 18px -10px rgba(150,70,130,.18);
+  --out:cubic-bezier(.16,1,.3,1);
+  --spring:cubic-bezier(.34,1.56,.64,1);
+
+  position:relative;
+  padding-bottom:6px;
+  color:var(--ink);
+  font-family:-apple-system,'PingFang SC','HarmonyOS Sans SC',system-ui,'Noto Sans SC',sans-serif;
+  -webkit-font-smoothing:antialiased;
+  letter-spacing:-.005em;
+}
+
+/* ---------- 卡片 ---------- */
+.cr-card{
+  position:relative;
+  border-radius:26px;
+  background:linear-gradient(168deg, rgba(255,255,255,.92) 0%, rgba(255,255,255,.66) 100%);
+  box-shadow:var(--shadow), inset 0 1px 0 rgba(255,255,255,.95), inset 0 0 0 1px rgba(255,255,255,.7);
+  overflow:hidden;
+}
+.cr-card--tint{
+  background:
+    radial-gradient(120% 90% at 90% 0%, rgba(255,231,240,.9) 0%, rgba(255,231,240,0) 60%),
+    radial-gradient(120% 100% at 0% 100%, rgba(223,251,241,.9) 0%, rgba(223,251,241,0) 62%),
+    linear-gradient(160deg,#FFF6EF 0%,#FCEFFA 52%,#EFFBF6 100%);
+  box-shadow:var(--shadow-lg), inset 0 1px 0 rgba(255,255,255,.9), inset 0 0 0 1px rgba(255,255,255,.6);
+}
+
+/* ---------- 文字 ---------- */
+.cr-eyebrow{
+  display:block;
+  font-size:9.5px; font-weight:750; letter-spacing:.16em;
+  color:var(--ink3); text-transform:uppercase;
+}
+.cr-sec{
+  display:flex; align-items:flex-end; justify-content:space-between;
+  gap:10px; margin:22px 6px 11px;
+}
+.cr-sec h4{ margin:0; font-size:12.5px; font-weight:780; color:var(--ink2); letter-spacing:.03em; }
+.cr-sec p{ margin:0; font-size:10.5px; color:var(--ink3); }
+
+/* ---------- 芯片 / 分段 ---------- */
+.cr-chip{
+  height:30px; padding:0 13px; border-radius:999px; cursor:pointer;
+  display:inline-flex; align-items:center; gap:5px;
+  font-size:11.5px; font-weight:700; color:var(--ink2);
+  background:rgba(255,255,255,.7);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.9), 0 6px 14px -12px rgba(120,55,110,.5);
+  transition:transform .22s var(--spring), background .22s var(--out), color .22s var(--out);
+  -webkit-tap-highlight-color:transparent;
+}
+.cr-chip:active{ transform:scale(.94); }
+.cr-chip.on{ color:#fff; background:linear-gradient(135deg,#FF9EC2,#B69CFF); box-shadow:0 10px 20px -12px rgba(180,100,190,.9); }
+
+.cr-chips{ display:flex; gap:8px; flex-wrap:wrap; margin:12px 2px 0; }
+
+/* ---------- 按钮 ---------- */
+.cr-btn{
+  height:42px; padding:0 20px; border-radius:16px; cursor:pointer;
+  font-size:13px; font-weight:750; color:#fff;
+  background:linear-gradient(135deg,#FF9EC2 0%,#B69CFF 100%);
+  box-shadow:0 16px 28px -18px rgba(180,100,190,.95), inset 0 1px 0 rgba(255,255,255,.5);
+  transition:transform .22s var(--spring), filter .22s var(--out);
+  -webkit-tap-highlight-color:transparent;
+}
+.cr-btn:active{ transform:scale(.96); }
+.cr-btn:disabled{ opacity:.45; cursor:default; transform:none; }
+.cr-btn--ghost{
+  color:var(--ink2); background:rgba(255,255,255,.72);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.95), 0 8px 18px -16px rgba(120,55,110,.6);
+}
+
+/* ---------- 表单 ---------- */
+.cr-field{ display:flex; flex-direction:column; gap:7px; margin-bottom:13px; }
+.cr-field > span{ font-size:10.5px; font-weight:750; color:var(--ink3); letter-spacing:.04em; }
+.cr-input{
+  height:44px; padding:0 14px; border:0; border-radius:14px; outline:none;
+  font-size:13.5px; color:var(--ink); background:rgba(255,255,255,.85);
+  box-shadow:inset 0 0 0 1px rgba(150,110,150,.14);
+  transition:box-shadow .22s var(--out), background .22s var(--out);
+}
+.cr-input::placeholder{ color:#BCA9C0; }
+.cr-input:focus{ background:#fff; box-shadow:inset 0 0 0 1.5px rgba(182,156,255,.75), 0 8px 20px -18px rgba(150,90,160,.9); }
+.cr-area{
+  min-height:76px; padding:12px 14px; border:0; border-radius:14px; outline:none; resize:none;
+  font:inherit; font-size:13.5px; color:var(--ink); background:rgba(255,255,255,.85);
+  box-shadow:inset 0 0 0 1px rgba(150,110,150,.14);
+}
+.cr-area:focus{ background:#fff; box-shadow:inset 0 0 0 1.5px rgba(182,156,255,.75); }
+.cr-toggle{ display:flex; align-items:center; gap:9px; font-size:12px; color:var(--ink2); }
+.cr-switch{
+  position:relative; display:inline-block; width:42px; height:25px; border-radius:999px; cursor:pointer; flex:0 0 auto;
+  background:rgba(150,120,160,.18); transition:background .26s var(--out);
+}
+.cr-switch i{
+  position:absolute; top:3px; left:3px; width:19px; height:19px; border-radius:50%;
+  background:#fff; box-shadow:0 3px 8px -3px rgba(80,40,80,.5);
+  transition:transform .3s var(--spring);
+}
+.cr-switch.on{ background:linear-gradient(135deg,#FF9EC2,#B69CFF); }
+.cr-switch.on i{ transform:translateX(17px); }
+
+/* ---------- 分隔 / 提示 ---------- */
+.cr-hr{ height:1px; background:linear-gradient(90deg,rgba(150,110,150,0),rgba(150,110,150,.16),rgba(150,110,150,0)); margin:14px 0; }
+.cr-note{ font-size:10.5px; color:var(--ink3); text-align:center; margin:14px 8px 0; line-height:1.6; }
+.cr-empty{ text-align:center; padding:34px 16px; }
+.cr-empty b{ display:block; font-size:14px; font-weight:750; margin-bottom:6px; }
+.cr-empty span{ font-size:11.5px; color:var(--ink3); }
+
+/* ---------- 入场 ---------- */
+@keyframes crIn{
+  0%{ opacity:0; transform:translateY(16px) scale(.975); filter:blur(6px); }
+  100%{ opacity:1; transform:none; filter:none; }
+}
+@keyframes crPop{
+  0%{ opacity:0; transform:scale(.9) rotate(-2deg); }
+  60%{ opacity:1; }
+  100%{ opacity:1; transform:none; }
+}
+@keyframes crFade{ from{ opacity:0; } to{ opacity:1; } }
+
+.cr-in{ animation:crIn .72s var(--out) both; animation-delay:calc(var(--i,0) * 70ms + 40ms); }
+
+@media (prefers-reduced-motion: reduce){
+  .cr-in, .cr-card, .cr-chip, .cr-btn{ animation:none !important; transition:none !important; }
+  .cr-in{ opacity:1 !important; transform:none !important; filter:none !important; }
+}

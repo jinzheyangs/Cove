@@ -10,6 +10,8 @@ class ApplyCreate(BaseModel):
 
     amount: int = Field(gt=0, le=100_000)
     reason: str = Field(min_length=1, max_length=500)
+    # 照片证明的对象存储 key，选填；由 /uploads 证据图接口先上传拿到
+    evidence_key: str | None = Field(default=None, max_length=300)
 
 
 class ApproveRequest(BaseModel):
@@ -38,6 +40,9 @@ class ApplyOut(BaseModel):
     applicant_id: int
     amount: int
     reason: str
+    evidence_key: str | None
+    # 当前可访问的证明图地址，由存储后端按需生成（OSS 私有桶是签名 URL）
+    evidence_url: str | None = None
     status: str
     approved_amount: int | None
     decision_remark: str | None

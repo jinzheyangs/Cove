@@ -1,4 +1,4 @@
-"""数据访问层：AI 对话的会话、消息和风格画像。
+"""数据访问层：AI 对话的会话和消息。
 
 约定：不 commit，事务由 service 控制。
 """
@@ -8,7 +8,7 @@ from datetime import datetime
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.agent.models import AgentConversation, AgentMessage, PersonaProfile
+from app.modules.agent.models import AgentConversation, AgentMessage
 
 
 async def create_conversation(
@@ -38,17 +38,6 @@ async def get_conversation(
     session: AsyncSession, conversation_id: int
 ) -> AgentConversation | None:
     return await session.get(AgentConversation, conversation_id)
-
-
-async def list_by_owner(
-    session: AsyncSession, owner_id: int
-) -> list[AgentConversation]:
-    stmt = (
-        select(AgentConversation)
-        .where(AgentConversation.owner_id == owner_id)
-        .order_by(AgentConversation.updated_at.desc())
-    )
-    return list(await session.scalars(stmt))
 
 
 async def add_message(
@@ -90,17 +79,6 @@ async def delete_conversation(
 ) -> None:
     await session.delete(conversation)
     await session.flush()
-
-
-async def get_profile(
-    session: AsyncSession, couple_id: int, user_id: int
-) -> PersonaProfile | None:
-    return await session.scalar(
-        select(PersonaProfile).where(
-            PersonaProfile.couple_id == couple_id,
-            PersonaProfile.user_id == user_id,
-        )
-    )
 
 
 async def delete_expired(session: AsyncSession, now: datetime) -> int:

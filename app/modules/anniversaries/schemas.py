@@ -12,6 +12,10 @@ class AnniversaryCreate(BaseModel):
     title: str = Field(min_length=1, max_length=50)
     date: date_type
     repeat_yearly: bool = True
+    # custom 普通日子 / wedding 结婚纪念日；只影响文案与图标
+    kind: Literal["custom", "wedding"] = "custom"
+    # countdown 数「还有几天」 / elapsed 数「已经多少天」
+    mode: Literal["countdown", "elapsed"] = "countdown"
     idempotency_key: str | None = Field(default=None, max_length=64)
 
     @field_validator("title")
@@ -29,6 +33,8 @@ class AnniversaryUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=50)
     date: date_type | None = None
     repeat_yearly: bool | None = None
+    kind: Literal["custom", "wedding"] | None = None
+    mode: Literal["countdown", "elapsed"] | None = None
 
     @field_validator("title")
     @classmethod
@@ -47,6 +53,7 @@ class AnniversaryOut(BaseModel):
     source 区分来源：
     - relationship：在一起，来自 couples.bind_at
     - birthday：双方生日，来自 users.birthday
+    - wedding：结婚纪念日，来自 anniversaries 表（kind=wedding）
     - custom：用户自定义，来自 anniversaries 表
 
     date 是原始日期，next_date 是下一次发生的日期。
@@ -54,7 +61,7 @@ class AnniversaryOut(BaseModel):
     """
 
     id: int | None = None
-    source: Literal["relationship", "birthday", "custom"]
+    source: Literal["relationship", "birthday", "wedding", "custom"]
     title: str
     date: date_type
     next_date: date_type
@@ -64,6 +71,8 @@ class AnniversaryOut(BaseModel):
     is_today: bool
     passed: bool
     repeat_yearly: bool
+    # 主读数方向：countdown 看「还有几天」 / elapsed 看「已经多少天」
+    mode: Literal["countdown", "elapsed"] = "countdown"
     owner_id: int | None = None
     # 关系纪念日和生日由专门接口维护，这里只允许改自定义纪念日
     editable: bool = False

@@ -10,11 +10,21 @@ from app.modules.coin_applies.models import CoinApply
 
 
 async def create(
-    session: AsyncSession, *, couple_id: int, applicant_id: int, amount: int, reason: str
+    session: AsyncSession,
+    *,
+    couple_id: int,
+    applicant_id: int,
+    amount: int,
+    reason: str,
+    evidence_key: str | None = None,
 ) -> CoinApply:
     """插入一条待审批申请。"""
     apply_item = CoinApply(
-        couple_id=couple_id, applicant_id=applicant_id, amount=amount, reason=reason
+        couple_id=couple_id,
+        applicant_id=applicant_id,
+        amount=amount,
+        reason=reason,
+        evidence_key=evidence_key,
     )
     session.add(apply_item)
     await session.flush()

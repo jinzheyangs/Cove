@@ -50,8 +50,19 @@ async def upload_avatar(
     return Envelope(data=result)
 
 
-@router.delete("/{key:path}", response_model=Envelope[None])
-async def delete_upload(key: str, couple: CurrentCouple) -> Envelope[None]:
-    """删除当前关系内的一张图片。key 必须属于当前 couple。"""
-    await service.delete_upload(couple, key)
-    return Envelope()
+@router.post("/evidence", response_model=Envelope[UploadOut])
+async def upload_evidence(
+    user: CurrentUser,
+    couple: CurrentCouple,
+    file: Annotated[UploadFile, File(description="JPEG / PNG / WebP，最大 10MB")],
+) -> Envelope[UploadOut]:
+    """上传一张金币申请（索要）的照片证明。
+
+    前端拿到返回的 `key` 后，把它放进 /coin-applies 的 evidence_key；
+    `url` 只用于预览，不要存进数据库。
+    """
+    data = await file.read(settings.UPLOAD_MAX_BYTES + 1)
+    result = await service.upload_evidence(
+        couple, user.id, file.content_type, data
+    )
+    return Envelope(data=result)

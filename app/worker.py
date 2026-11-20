@@ -5,15 +5,20 @@
 
 定时任务：
 - 每天 03:17 金币对账
-- 每天 03:41 清理燃尽期已过的秘密内容
 - 每天 04:07 清理过期 Agent 会话
 - 每天 04:17 过期未确认的 Agent 动作
+- 每天 04:27 清理过期刷新令牌
+- 每天 04:37 补齐对话记忆索引
+- 每小时第 7 分 向量对账（补回 Chroma 丢的数据）
 """
+
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from arq import cron
 from arq.connections import RedisSettings
 from opentelemetry import trace
+from sqlalchemy import delete, or_, select
 
 from app.core.config import settings
 from app.core.db import SessionLocal
@@ -21,11 +26,11 @@ from app.core.logging import configure_logging
 from app.core.metrics import COIN_RECONCILE_MISMATCHES
 from app.core.tracing import setup_tracing
 from app.modules.agent import actions as agent_actions
-from app.modules.agent import import_service as agent_import_service
 from app.modules.agent import service as agent_service
+from app.modules.agent.models import AgentConversation
 from app.modules.ai import indexing
 from app.modules.coins import service as coin_service
-from app.modules.secrets import service as secret_service
+from app.modules.users.models import RefreshToken
 
 # worker 是独立进程，日志和追踪都要单独初始化
 configure_logging()
@@ -62,30 +67,6 @@ async def reconcile_coins(ctx: dict) -> int:
         return len(mismatches)
 
 
-async def purge_burned_secrets(ctx: dict) -> int:
-    """清理燃尽期已过的秘密内容。
-
-    摘取时只标记 burned，内容保留 24 小时；
-    这里负责把超过宽限期的正文清空。
-
-    Returns:
-        被清理的记录数。
-    """
-    with tracer.start_as_current_span("worker.purge_burned_secrets"):
-        async with SessionLocal() as session:
-            count = await secret_service.purge_burned(session)
-
-        logger.info("清理燃尽秘密 %d 条", count)
-        return count
-
-
-async def process_chat_import(ctx: dict, import_id: int) -> None:
-    """导入后生成画像并建立向量索引。"""
-    with tracer.start_as_current_span("worker.process_chat_import"):
-        async with SessionLocal() as session:
-            await agent_import_service.process_chat_import(session, import_id)
-
-
 async def expire_agent_actions(ctx: dict) -> int:
     """把超时未确认的动作标记为 expired。"""
     with tracer.start_as_current_span("worker.expire_agent_actions"):
@@ -106,11 +87,73 @@ async def cleanup_agent_conversations(ctx: dict) -> int:
         return count
 
 
+async def cleanup_refresh_tokens(ctx: dict) -> int:
+    """清理过期和已吊销的刷新令牌记录。
+
+    每次刷新都会把旧记录标成 revoked 并插入一条新的，
+    不清的话单用户一年就能堆上万行。保留 7 天，够排查「刚被登出」的情况。
+    """
+    cutoff = datetime.now(UTC) - timedelta(days=7)
+    with tracer.start_as_current_span("worker.cleanup_refresh_tokens"):
+        async with SessionLocal() as session:
+            result = await session.execute(
+                delete(RefreshToken).where(
+                    or_(
+                        RefreshToken.expires_at < cutoff,
+                        RefreshToken.revoked_at < cutoff,
+                    )
+                )
+            )
+            await session.commit()
+            count = result.rowcount or 0
+
+        logger.info("清理刷新令牌 %d 条", count)
+        return count
+
+
+async def reconcile_vectors(ctx: dict) -> int:
+    """每天和 Chroma 对一次账：补回丢失的向量、清掉残留和孤儿。
+
+    Chroma 丢数据时不会报错，表现只是「Ta 想不起你说过的话」，
+    所以必须有个任务主动发现并修，不能靠人手动重建。
+    """
+    with tracer.start_as_current_span("worker.reconcile_vectors"):
+        async with SessionLocal() as session:
+            result = await indexing.reconcile_vectors(session)
+
+        logger.info(
+            "向量对账：补回 %d，清残留 %d，删孤儿 %d",
+            result["repaired"],
+            result["stale"],
+            result["orphans"],
+        )
+        return result["repaired"]
+
+
 async def index_diary(ctx: dict, diary_id: int) -> None:
     """重建一篇日记的向量索引。"""
     with tracer.start_as_current_span("worker.index_diary"):
         async with SessionLocal() as session:
             await indexing.index_diary(session, diary_id)
+
+
+async def index_conversation_memories(ctx: dict, conversation_id: int) -> None:
+    """把一次会话切块存成长期记忆，并建向量索引。
+
+    由「离开模拟Ta 页面」触发；失败只记日志，不重试到打爆上游。
+    """
+    with tracer.start_as_current_span("worker.index_conversation_memories"):
+        async with SessionLocal() as session:
+            try:
+                count = await indexing.index_chat_memories(session, conversation_id)
+            except Exception as exc:  # noqa: BLE001 - 记忆失败不该影响用户聊天
+                await session.rollback()
+                logger.warning(
+                    "worker.memory_failed", conversation_id=conversation_id, error=repr(exc)
+                )
+                return
+
+        logger.info("会话记忆入库 %d 块 (conversation_id=%d)", count, conversation_id)
 
 
 async def delete_diary_vectors(ctx: dict, diary_id: int) -> None:
@@ -131,14 +174,35 @@ async def delete_user_vectors(ctx: dict, couple_id: int | None, user_id: int) ->
             await indexing.delete_user_vectors(session, couple_id, user_id)
 
 
-async def delete_chat_import_vectors(ctx: dict, import_id: int) -> None:
-    """删除一次聊天导入的全部向量。
+async def index_all_memories(ctx: dict) -> int:
+    """每天兜底扫一遍：有消息的会话都重新切块入库。
 
-    注销账号时，本人上传的导入已被删除，这里清理它在 Chroma 里的残留。
+    页面离开时已经触发过一次，这里只补「没触发成功的」
+    （杀进程、断网）。块内容没变的不会重新 embedding。
     """
-    with tracer.start_as_current_span("worker.delete_chat_import_vectors"):
+    with tracer.start_as_current_span("worker.index_all_memories"):
         async with SessionLocal() as session:
-            await indexing.delete_chat_import(session, import_id)
+            ids = list(
+                await session.scalars(
+                    select(AgentConversation.id).where(
+                        AgentConversation.persist.is_(True)
+                    )
+                )
+            )
+            total = 0
+            for conversation_id in ids:
+                try:
+                    total += await indexing.index_chat_memories(session, conversation_id)
+                except Exception as exc:  # noqa: BLE001 - 单条失败不影响其它会话
+                    await session.rollback()
+                    logger.warning(
+                        "worker.memory_batch_failed",
+                        conversation_id=conversation_id,
+                        error=repr(exc),
+                    )
+
+        logger.info("兜底记忆入库 %d 块 / %d 条会话", total, len(ids))
+        return total
 
 
 class WorkerSettings:
@@ -152,16 +216,20 @@ class WorkerSettings:
     functions = [
         ping,
         index_diary,
+        index_conversation_memories,
         delete_diary_vectors,
         delete_user_vectors,
-        delete_chat_import_vectors,
-        process_chat_import,
     ]
     # 错开整点执行，避免和其他系统的定时任务撞车
     cron_jobs = [
         cron(reconcile_coins, hour=3, minute=17),
-        cron(purge_burned_secrets, hour=3, minute=41),
         cron(cleanup_agent_conversations, hour=4, minute=7),
         cron(expire_agent_actions, hour=4, minute=17),
+        cron(cleanup_refresh_tokens, hour=4, minute=27),
+        # 会话记忆：补那些「离开页面没触发成功」的
+        cron(index_all_memories, hour=4, minute=37),
+        # 向量对账：Chroma 少数据不会报错，只能靠主动比对修回。
+        # 每小时一次，别等一天——用户半天内就会觉得「Ta 忘了我说的」
+        cron(reconcile_vectors, minute=7),
     ]
     redis_settings = RedisSettings.from_dsn(settings.REDIS_URL)

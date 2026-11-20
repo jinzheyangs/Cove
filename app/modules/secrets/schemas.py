@@ -14,12 +14,12 @@ class SecretCreate(BaseModel):
 
     cost_coins 不传时按 level 取默认值。
     作者可以自己定价：定低是“希望你快读”，定高是“这件事对我很重要”。
+    没有「阅后即焚」开关：规则只有一条，摘下来看完就销毁。
     """
 
     content: str = Field(min_length=1, max_length=5000)
     level: Literal["normal", "deep"] = "normal"
     cost_coins: int | None = Field(default=None, ge=1, le=1000)
-    is_burn_after_read: bool = False
 
 
 class SecretListItem(BaseModel):
@@ -28,7 +28,6 @@ class SecretListItem(BaseModel):
     id: int
     level: str
     cost_coins: int
-    is_burn_after_read: bool
     status: str
     authored_by_me: bool
     viewed: bool
@@ -42,6 +41,5 @@ class SecretDetail(BaseModel):
     content: str
     level: str
     cost_coins: int
-    is_burn_after_read: bool
     status: str
     created_at: datetime

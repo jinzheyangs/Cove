@@ -1,9 +1,9 @@
 """商城的 HTTP 接口。
 
 权限约定：
-- 上架：任意一方
-- 审批 / 拒绝：只能是另一方
+- 上架：任意一方，提交后直接上架
 - 下架：只能是创建者
+- 编辑：只能是创建者，保存后直接生效
 - 购买：只能是另一方
 - 核销：只能是商品创建者
 """
@@ -15,10 +15,8 @@ from app.core.schemas import Envelope
 from app.modules.couples.deps import CurrentCouple
 from app.modules.mall import service
 from app.modules.mall.schemas import (
-    ItemApprove,
     ItemCreate,
     ItemOut,
-    ItemReject,
     OrderCreate,
     OrderOut,
 )
@@ -30,7 +28,7 @@ router = APIRouter(prefix="/mall", tags=["mall"])
 async def create_item(
     body: ItemCreate, user: CurrentUser, couple: CurrentCouple, session: SessionDep
 ) -> Envelope[ItemOut]:
-    """上架商品，等待对方审批价格。"""
+    """上架商品，提交后直接上架，无需审批。"""
     item = await service.create_item(session, couple, user, body)
     return Envelope(data=ItemOut.model_validate(item))
 
@@ -53,38 +51,25 @@ async def list_my_items(
     return Envelope(data=[ItemOut.model_validate(i) for i in items])
 
 
-@router.post("/items/{item_id}/approve", response_model=Envelope[ItemOut])
-async def approve_item(
-    item_id: int,
-    body: ItemApprove,
-    user: CurrentUser,
-    couple: CurrentCouple,
-    session: SessionDep,
-) -> Envelope[ItemOut]:
-    """审批通过，可修改最终价格。"""
-    item = await service.approve_item(session, couple, user, item_id, body.price_coins)
-    return Envelope(data=ItemOut.model_validate(item))
-
-
-@router.post("/items/{item_id}/reject", response_model=Envelope[ItemOut])
-async def reject_item(
-    item_id: int,
-    body: ItemReject,
-    user: CurrentUser,
-    couple: CurrentCouple,
-    session: SessionDep,
-) -> Envelope[ItemOut]:
-    """拒绝上架。"""
-    item = await service.reject_item(session, couple, user, item_id, body.reason)
-    return Envelope(data=ItemOut.model_validate(item))
-
-
 @router.post("/items/{item_id}/offline", response_model=Envelope[ItemOut])
 async def offline_item(
     item_id: int, user: CurrentUser, couple: CurrentCouple, session: SessionDep
 ) -> Envelope[ItemOut]:
     """下架自己上架的商品。"""
     item = await service.offline_item(session, couple, user, item_id)
+    return Envelope(data=ItemOut.model_validate(item))
+
+
+@router.post("/items/{item_id}/edit", response_model=Envelope[ItemOut])
+async def edit_item(
+    item_id: int,
+    body: ItemCreate,
+    user: CurrentUser,
+    couple: CurrentCouple,
+    session: SessionDep,
+) -> Envelope[ItemOut]:
+    """编辑自己上架的商品，保存后直接生效。"""
+    item = await service.edit_item(session, couple, user, item_id, body)
     return Envelope(data=ItemOut.model_validate(item))
 
 
@@ -114,4 +99,13 @@ async def complete_order(
 ) -> Envelope[OrderOut]:
     """服务提供方确认订单已完成。"""
     order = await service.complete_order(session, couple, user, order_id)
+    return Envelope(data=OrderOut.model_validate(order))
+
+
+@router.post("/orders/{order_id}/cancel", response_model=Envelope[OrderOut])
+async def cancel_order(
+    order_id: int, user: CurrentUser, couple: CurrentCouple, session: SessionDep
+) -> Envelope[OrderOut]:
+    """买家取消待兑现订单，金币原路退回。"""
+    order = await service.cancel_order(session, couple, user, order_id)
     return Envelope(data=OrderOut.model_validate(order))

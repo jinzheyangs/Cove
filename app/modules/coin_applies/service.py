@@ -9,8 +9,10 @@ from datetime import UTC, datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
+from app.core.storage import get_storage
 from app.modules.coin_applies import repository as repo
 from app.modules.coin_applies.models import CoinApply
+from app.modules.coin_applies.schemas import ApplyOut
 from app.modules.coins import service as coin_service
 from app.modules.couples.models import Couple
 from app.modules.notifications import service as notification_service
@@ -25,8 +27,25 @@ def _partner_id(couple: Couple, user_id: int) -> int:
     return couple.user2_id if couple.user1_id == user_id else couple.user1_id
 
 
+def to_out(item: CoinApply) -> ApplyOut:
+    """把 ORM 对象转成接口结构。
+
+    evidence_key 是对象存储 key；展示用的地址按当前存储配置生成，
+    本地是 /uploads/xx，OSS 私有桶是带有效期的签名 URL。
+    """
+    out = ApplyOut.model_validate(item)
+    if item.evidence_key:
+        out.evidence_url = get_storage().build_url(item.evidence_key)
+    return out
+
+
 async def apply(
-    session: AsyncSession, couple: Couple, applicant: User, amount: int, reason: str
+    session: AsyncSession,
+    couple: Couple,
+    applicant: User,
+    amount: int,
+    reason: str,
+    evidence_key: str | None = None,
 ) -> CoinApply:
     """提交一条金币申请。
 
@@ -41,6 +60,7 @@ async def apply(
         applicant_id=applicant.id,
         amount=amount,
         reason=reason,
+        evidence_key=evidence_key,
     )
     await session.commit()
     await session.refresh(item)

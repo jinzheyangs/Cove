@@ -1,3 +1,12 @@
+# ---- 前端构建 ----
+FROM node:22-slim AS web
+WORKDIR /web
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+COPY frontend/ ./
+RUN npm run build
+
+# ---- 运行时 ----
 FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
@@ -15,6 +24,8 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --no-dev --extra oss
 
 COPY . .
+# 前端产物来自上一阶段，覆盖掉本地可能残留的 dist
+COPY --from=web /web/dist ./frontend/dist
 
 EXPOSE 8000
 

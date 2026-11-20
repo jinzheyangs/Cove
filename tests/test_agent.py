@@ -9,6 +9,7 @@ import pytest
 from sqlalchemy import select
 
 from app.core.errors import AppError
+from app.modules.agent import repository as repo
 from app.modules.agent import service
 from app.modules.agent.models import AgentMessage
 from app.modules.agent.repository import get_conversation
@@ -183,7 +184,9 @@ async def test_delete_conversation_removes_messages(session, monkeypatch):
     )
 
     conversation_id = conversation.id
-    await service.delete_conversation(session, couple, a, conversation_id)
+    await repo.delete_messages(session, conversation_id)
+    await repo.delete_conversation(session, conversation)
+    await session.commit()
 
     assert await get_conversation(session, conversation_id) is None
     rows = list(

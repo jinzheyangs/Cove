@@ -27,9 +27,27 @@ uploads/
 .coverage
 htmlcov/
 
+# ---- 运行日志 ----
+logs/
+
 # ---- 编辑器 / 系统 ----
 .idea/
 .vscode/
 *.swp
 .DS_Store
 Thumbs.db
+
+# ---- 前端（源码入库，构建产物与依赖不入库）----
+frontend/node_modules/
+frontend/dist/
+frontend/.shots/
+frontend/coverage-report.json
+frontend/.env.local
+frontend/.env.*.local
+*.tsbuildinfo
+
+# ---- 本地备份 ----
+backups/
+
+# ---- 前端调试截图（临时）----
+web/_*.png

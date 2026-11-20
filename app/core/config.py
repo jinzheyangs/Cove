@@ -48,8 +48,6 @@ class Settings(BaseSettings):
     # 切片长度与重叠，按字符数（中文场景不按 token 切）
     RAG_CHUNK_SIZE: int = 400
     RAG_CHUNK_OVERLAP: int = 50
-    # 每个用户最多索引多少个聊天窗口，控制 embedding 成本
-    RAG_CHAT_MAX_WINDOWS: int = 5000
 
     # embedding 走 OpenAI 兼容接口，供应商可换：
     # 通义 / 智谱 / 硅基流动 / 本地 vLLM 都支持
@@ -92,6 +90,10 @@ class Settings(BaseSettings):
     # 逗号分隔的允许来源，例如 "https://a.com,https://b.com"
     # 手机 App 不发送 Origin，留空不影响；给 Web 端用
     CORS_ORIGINS: str = ""
+    # 部署在反向代理（Caddy / Nginx）后面时置 true：
+    # 限流按 X-Forwarded-For 里最后一跳的真实 IP 计数，而不是代理自身的 IP。
+    # 直连（本地开发）保持 false，否则客户端可以自己伪造这个头绕过限流。
+    TRUST_PROXY_HEADERS: bool = False
 
     # 限流开关。测试环境会关掉，避免依赖 Redis
     RATE_LIMIT_ENABLED: bool = True
@@ -113,11 +115,6 @@ class Settings(BaseSettings):
     AGENT_MAX_HISTORY_TURNS: int = 10
     # 一轮对话里最多允许几次工具调用
     AGENT_MAX_TOOL_ROUNDS: int = 5
-    # 聊天记录导入上限
-    CHAT_IMPORT_MAX_BYTES: int = 20 * 1024 * 1024
-    CHAT_IMPORT_MAX_MESSAGES: int = 100_000
-    # 每次生成画像抽样的条数
-    PERSONA_SAMPLE_SIZE: int = 50
 
     # ---------------------------------------------------------------- 队列
     # 测试环境关掉，避免每个写操作都尝试连 Redis
@@ -132,6 +129,11 @@ class Settings(BaseSettings):
     METRICS_TOKEN: str = ""
 
     # 链路追踪默认关闭，避免本地/测试依赖 Jaeger
+    # ---------------------------------------------------------------- 前端
+    # 同源托管的前端构建产物（相对仓库根）。目录不存在则后端退回纯 API 模式。
+    # 默认指向 frontend/dist：`cd frontend && npm run build` 之后后端就能直接托管 SPA。
+    FRONTEND_DIST: str = "./frontend/dist"
+
     # ---------------------------------------------------------------- 存储
     # local：开发环境写本地目录；oss：阿里云对象存储
     STORAGE_BACKEND: str = "local"

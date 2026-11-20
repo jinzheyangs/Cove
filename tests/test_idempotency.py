@@ -92,7 +92,6 @@ async def test_mall_same_key_charges_once(session):
     item = await mall_service.create_item(
         session, couple, b, ItemCreate(title="早餐", price_coins=10)
     )
-    await mall_service.approve_item(session, couple, a, item.id)
 
     first = await mall_service.buy(
         session, couple, a, item.id, idempotency_key="order-1"

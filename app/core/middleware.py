@@ -24,6 +24,24 @@ logger = structlog.get_logger("http")
 _SKIP_RATE_LIMIT = {"/health", "/health/db", "/metrics"}
 
 
+def client_ip(request: Request) -> str:
+    """取调用方 IP。
+
+    直连时就是 socket 对端；部署在 Caddy 后面时，socket 对端永远是新 Caddy 的容器 IP，
+    所有用户会被算进同一个限流桶（两个人一起用就 429）。这时读 X-Forwarded-For。
+
+    X-Forwarded-For 是逗号分隔的链，只有**最后一跳**是可信代理亲手追加的真实地址，
+    前面的部分客户端可以随意伪造，所以取 [-1] 而不是 [0]。
+    """
+    if settings.TRUST_PROXY_HEADERS:
+        forwarded = request.headers.get("x-forwarded-for")
+        if forwarded:
+            hops = [h.strip() for h in forwarded.split(",") if h.strip()]
+            if hops:
+                return hops[-1]
+    return request.client.host if request.client else "unknown"
+
+
 class RequestContextMiddleware(BaseHTTPMiddleware):
     """请求上下文：request_id、耗时、指标、访问日志。
 
@@ -36,6 +54,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
+        ip = client_ip(request)
 
         # 每个请求开始前清空，防止上一个请求的上下文泄漏到当前请求
         structlog.contextvars.clear_contextvars()
@@ -43,7 +62,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             request_id=request_id,
             method=request.method,
             path=request.url.path,
-            client_ip=request.client.host if request.client else None,
+            client_ip=ip,
         )
 
         started = time.perf_counter()   #记录请求开始时刻
@@ -124,7 +143,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if not settings.RATE_LIMIT_ENABLED or path in _SKIP_RATE_LIMIT:
             return await call_next(request)
 
-        client_ip = request.client.host if request.client else "unknown"
+        # 前端静态资源（index.html / sw.js / 图标 / manifest）不限流：
+        # 它们不碰数据库、没有撞库风险，却会在首屏一次性发十几个请求，
+        # 每个都去问一次 Redis 等于给冷启动平白加上几十毫秒。
+        if not path.startswith("/api/"):
+            return await call_next(request)
+
+        ip = client_ip(request)
         limit = settings.RATE_LIMIT_REQUESTS
         window = settings.RATE_LIMIT_WINDOW_SECONDS
         bucket = "global"
@@ -137,10 +162,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             bucket = "ai"
 
         allowed = await get_limiter().hit(
-            f"rl:{bucket}:{client_ip}", limit, window
+            f"rl:{bucket}:{ip}", limit, window
         )
         if not allowed:
-            logger.warning("rate_limit.exceeded", bucket=bucket, client_ip=client_ip)
+            logger.warning("rate_limit.exceeded", bucket=bucket, client_ip=ip)
             # 这里直接返回，不走异常处理器：限流发生在进入路由之前
             return JSONResponse(
                 status_code=429,

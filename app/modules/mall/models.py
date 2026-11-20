@@ -1,8 +1,7 @@
 """商城表结构。
 
-商品流：
-    pending --approve--> approved --offline--> offline
-    pending --reject---> rejected
+商品流（无审批，上架即可兑换）：
+    approved --offline--> offline
 
 订单流：
     pending --complete--> completed
@@ -29,9 +28,8 @@ from app.core.db import Base
 class MallItem(Base):
     """一件可兑换的商品 / 服务。
 
-    上架需要对方确认价格：
-    price_coins 是创建者的建议价，approved_price 是双方最终认可的价格。
-    实际成交以 approved_price 为准。
+    上架无需审批：提交后直接 approved，价格就是 price_coins。
+    实际成交以 price_coins 为准，并在下单时快照到订单。
     """
 
     __tablename__ = "mall_items"
@@ -39,22 +37,18 @@ class MallItem(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     # 归属哪一对情侣，只有这俩人能操作
     couple_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("couples.id"))
-    # 服务提供方，也是审批时不能自审的人；同时也是上架提议人
+    # 服务提供方 / 上架人
     creator_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
     title: Mapped[str] = mapped_column(String(100))     # 商品名字
     description: Mapped[str | None] = mapped_column(Text)       # 描述
-    # 创建者建议价
+    # 成交价格，上架即确定
     price_coins: Mapped[int] = mapped_column(BigInteger)
-    # 审批后最终价；审批人可以直接沿用建议价
-    approved_price: Mapped[int | None] = mapped_column(BigInteger)
     # 可兑换次数，None 表示不限
     max_orders: Mapped[int | None] = mapped_column(BigInteger)
-    # pending / approved / rejected / offline
+    # approved / offline
     status: Mapped[str] = mapped_column(
-        String(20), default="pending", server_default="pending"
+        String(20), default="approved", server_default="approved"
     )
-    approver_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("users.id"))
-    reject_reason: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -65,7 +59,7 @@ class MallItem(Base):
     __table_args__ = (
         CheckConstraint("price_coins > 0", name="ck_mall_items_price_positive"),
         CheckConstraint(
-            "status IN ('pending', 'approved', 'rejected', 'offline')",
+            "status IN ('approved', 'offline')",
             name="ck_mall_items_status",
         ),
         Index("ix_mall_items_couple_status", "couple_id", "status"),

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+<meta name="theme-color" content="#FFFFFF" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Cove" />
+<link rel="manifest" href="./manifest.webmanifest" />
+<link rel="apple-touch-icon" sizes="180x180" href="./icon-180.png" />
+<link rel="icon" href="./icon.svg" type="image/svg+xml" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="format-detection" content="telephone=no" />
+<meta name="description" content="Cove · 两个人之间，慢慢长出来的一段关系" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<title>Cove — 两个人之间，慢慢长出来的一段关系</title>
+<script>
+/* 本地开发自愈：service worker 对静态资源是 cache-first，会把 /src 下的旧模块
+   一直喂给页面，导致改完代码刷新还是旧界面。开发地址上直接注销 SW 并清掉缓存，
+   清完只自动重载一次。 */
+(function () {
+  var host = location.hostname;
+  var isDev = host === '127.0.0.1' || host === 'localhost' || host === '[::1]';
+  if (!isDev || !('serviceWorker' in navigator) || !window.caches) return;
+  navigator.serviceWorker.getRegistrations().then(function (rs) {
+    if (!rs.length) return;
+    Promise.all(rs.map(function (r) { return r.unregister(); }))
+      .then(function () { return caches.keys(); })
+      .then(function (keys) {
+        return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+      })
+      .then(function () {
+        if (!sessionStorage.getItem('cove.sw-cleaned')) {
+          sessionStorage.setItem('cove.sw-cleaned', '1');
+          location.reload();
+        }
+      })
+      .catch(function () {});
+  }).catch(function () {});
+})();
+</script>
+</head>
+<body>
+<div id="app"></div>
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>

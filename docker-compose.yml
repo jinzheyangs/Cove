@@ -6,6 +6,9 @@ services:
     environment:
       # 容器内用服务名访问，覆盖 .env 里的 localhost
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379/0
+      CHROMA_HOST: chroma
+      CHROMA_PORT: "8000"
       OTEL_EXPORTER_ENDPOINT: http://jaeger:4318/v1/traces
     depends_on:
       postgres:
@@ -27,6 +30,9 @@ services:
       - .env
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379/0
+      CHROMA_HOST: chroma
+      CHROMA_PORT: "8000"
       OTEL_EXPORTER_ENDPOINT: http://jaeger:4318/v1/traces
     depends_on:
       postgres:
@@ -43,6 +49,9 @@ services:
       - .env
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379/0
+      CHROMA_HOST: chroma
+      CHROMA_PORT: "8000"
       OTEL_EXPORTER_ENDPOINT: http://jaeger:4318/v1/traces
     depends_on:
       postgres:
@@ -109,7 +118,7 @@ services:
     ports:
       - "58000:8000"         # 仅开发用；生产环境不要映射
     volumes:
-      - chromadata:/chroma/chroma
+      - chromadata:/data        # 新版 chroma 镜像的持久化目录；旧版是 /chroma/chroma
     environment:
       - IS_PERSISTENT=TRUE
       - ANONYMIZED_TELEMETRY=FALSE

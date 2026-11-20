@@ -1,4 +1,4 @@
-"""业务层：注销账号与导出个人数据。"""
+"""业务层：注销账号。"""
 
 from datetime import UTC, datetime
 from uuid import uuid4
@@ -31,23 +31,16 @@ async def delete_account(session: AsyncSession, user: User, password: str) -> No
     if not verify_password(password, user.password_hash):
         raise AppError("密码错误", code=15001, status_code=403)
 
-    # 1. 解除当前关系，但保留历史记录供对方导出
+    # 1. 解除当前关系，但保留历史记录供对方查看
     couple = await couple_repo.get_active_by_user(session, user.id)
-    # 先记下 couple_id：注销后关系已解除，后面清理向量还要用
-    couple_id = couple.id if couple is not None else None
     if couple is not None:
         couple.status = "unbound"
         couple.unbound_at = datetime.now(UTC)
 
-    # 2. 记下聊天导入：本人上传的要删，对方上传但含本人发言的要重建索引
-    uploaded_imports, affected_imports = await repo.collect_chat_imports(
-        session, couple_id, user.id
-    )
-
-    # 3. 删除个人内容（金币流水和商城记录保留，否则对方账目会对不上）
+    # 2. 删除个人内容（金币流水和商城记录保留，否则对方账目会对不上）
     await repo.purge_personal_content(session, user.id)
 
-    # 4. 匿名化用户行，保留外键完整性。
+    # 3. 匿名化用户行，保留外键完整性。
     #    手机号改成 deleted-{id}，把原手机号释放出来，用户可以重新注册
     user.phone = f"deleted-{user.id}"
     user.password_hash = hash_password(uuid4().hex)
@@ -67,95 +60,6 @@ async def delete_account(session: AsyncSession, user: User, password: str) -> No
     await session.commit()
 
     # 删除该用户在向量库里的全部索引。
-    # couple_id 可能为空（注销时已解绑），此时按 user_id 全局删除。
-    await enqueue("delete_user_vectors", couple_id, user.id)
-    # 本人上传的导入已被整条删除，清掉它对应的全部向量
-    for import_id in uploaded_imports:
-        await enqueue("delete_chat_import_vectors", import_id)
-    # 对方上传的导入里删掉了本人发言，重建它的索引和画像
-    for import_id in affected_imports:
-        await enqueue("process_chat_import", import_id)
-
-
-# 导出时每类数据保留的字段。显式列出来，避免把内部字段（如 user_id）带出去
-_DIARY_FIELDS = (
-    "id",
-    "mode",
-    "event_id",
-    "title",
-    "content",
-    "mood_tags",
-    "location",
-    "images",
-    "created_at",
-)
-_SECRET_FIELDS = ("id", "level", "cost_coins", "status", "content", "created_at")
-_BILL_FIELDS = (
-    "id",
-    "amount",
-    "category",
-    "type",
-    "scope",
-    "is_private",
-    "remark",
-    "created_at",
-)
-_TODO_FIELDS = (
-    "id",
-    "type",
-    "category",
-    "title",
-    "description",
-    "status",
-    "completed_at",
-    "created_at",
-)
-_DAILY_FIELDS = ("day", "question", "answer", "created_at")
-_ANNIVERSARY_FIELDS = ("id", "title", "date", "repeat_yearly", "created_at")
-_TX_FIELDS = ("id", "type", "amount", "ref_type", "ref_id", "remark", "created_at")
-
-
-def _pick(obj: object, fields: tuple[str, ...]) -> dict:
-    """从 ORM 对象里挑出指定字段，转成可 JSON 序列化的 dict。
-
-    加密字段读出来时已经由 ORM 自动解密。
-    """
-    return {field: getattr(obj, field) for field in fields}
-
-
-async def export_data(session: AsyncSession, user: User) -> dict:
-    """导出个人数据。
-
-    返回一个可直接 JSON 序列化的字典：
-    资料、关系、日记、秘密、账本、清单、每日一问、金币流水。
-    """
-    couple = await couple_repo.get_active_by_user(session, user.id)
-    raw = await repo.collect_export(session, user.id)
-
-    return {
-        "profile": {
-            "id": user.id,
-            "phone": user.phone,
-            "nickname": user.nickname,
-            "birthday": user.birthday,
-            "created_at": user.created_at,
-        },
-        "couple": (
-            {
-                "id": couple.id,
-                "bind_at": couple.bind_at,
-                "status": couple.status,
-            }
-            if couple
-            else None
-        ),
-        "diaries": [_pick(d, _DIARY_FIELDS) for d in raw["diaries"]],
-        "secrets": [_pick(s, _SECRET_FIELDS) for s in raw["secrets"]],
-        "bills": [_pick(b, _BILL_FIELDS) for b in raw["bills"]],
-        "todos": [_pick(t, _TODO_FIELDS) for t in raw["todos"]],
-        "daily": [_pick(d, _DAILY_FIELDS) for d in raw["daily"]],
-        "anniversaries": [
-            _pick(a, _ANNIVERSARY_FIELDS) for a in raw["anniversaries"]
-        ],
-        "coin_transactions": [_pick(t, _TX_FIELDS) for t in raw["transactions"]],
-    }
+    # 注销是彻底离开，按 user_id 全局删（couple_id 传 None）：
+    # 只删「当前这段关系」的话，以前解除过的关系留下的向量会躺在库里没人管。
+    await enqueue("delete_user_vectors", None, user.id)

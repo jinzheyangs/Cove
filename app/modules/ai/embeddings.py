@@ -25,12 +25,23 @@ def is_configured() -> bool:
     )
 
 
+_CLIENT = None
+
+
 def _client() -> AsyncOpenAI:
-    return AsyncOpenAI(
-        api_key=settings.EMBEDDING_API_KEY,
-        base_url=settings.EMBEDDING_BASE_URL or None,
-        timeout=30.0,
-    )
+    """复用同一个客户端。
+
+    以前每次向量化都新建一个 AsyncOpenAI：等于每轮对话重新做一次
+    TCP/TLS 握手，光这一下就有几百毫秒。客户端本身可以并发使用。
+    """
+    global _CLIENT
+    if _CLIENT is None:
+        _CLIENT = AsyncOpenAI(
+            api_key=settings.EMBEDDING_API_KEY,
+            base_url=settings.EMBEDDING_BASE_URL or None,
+            timeout=30.0,
+        )
+    return _CLIENT
 
 
 async def embed_texts(texts: list[str]) -> list[list[float]]:

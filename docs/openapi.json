@@ -440,13 +440,40 @@
         ]
       }
     },
+    "/api/v1/couples/us/stats": {
+      "get": {
+        "tags": [
+          "couples"
+        ],
+        "summary": "Us Stats",
+        "description": "解绑前先让两个人看清楚：这段关系里攒下了多少东西。\n\n只统计、不改状态；解绑本身仍然要 /couples/unbind + confirm。",
+        "operationId": "us_stats_api_v1_couples_us_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_UsStatsOut_"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/couples/me": {
       "get": {
         "tags": [
           "couples"
         ],
         "summary": "Get My Couple",
-        "description": "查询当前关系。没绑定时 data 为 null，不是报错。",
+        "description": "查询当前关系。没绑定时 data 为 null，不是报错。\n\n顺带把另一半的昵称带上：日记这类「两边各写一段」的界面要显示名字，\n否则前端只能写死一个假名字。",
         "operationId": "get_my_couple_api_v1_couples_me_get",
         "responses": {
           "200": {
@@ -455,6 +482,51 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Envelope_Union_CoupleOut__NoneType__"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "couples"
+        ],
+        "summary": "Update My Couple",
+        "description": "更新关系资料。目前只有「在一起」的起始日。\n\n未绑定会由 CurrentCouple 直接挡成 409。",
+        "operationId": "update_my_couple_api_v1_couples_me_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CoupleUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_CoupleOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -1069,7 +1141,7 @@
           "mall"
         ],
         "summary": "Create Item",
-        "description": "上架商品，等待对方审批价格。",
+        "description": "上架商品，提交后直接上架，无需审批。",
         "operationId": "create_item_api_v1_mall_items_post",
         "requestBody": {
           "content": {
@@ -1137,122 +1209,6 @@
         ]
       }
     },
-    "/api/v1/mall/items/{item_id}/approve": {
-      "post": {
-        "tags": [
-          "mall"
-        ],
-        "summary": "Approve Item",
-        "description": "审批通过，可修改最终价格。",
-        "operationId": "approve_item_api_v1_mall_items__item_id__approve_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "item_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Item Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ItemApprove"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Envelope_ItemOut_"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/mall/items/{item_id}/reject": {
-      "post": {
-        "tags": [
-          "mall"
-        ],
-        "summary": "Reject Item",
-        "description": "拒绝上架。",
-        "operationId": "reject_item_api_v1_mall_items__item_id__reject_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "item_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Item Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ItemReject"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Envelope_ItemOut_"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/mall/items/{item_id}/offline": {
       "post": {
         "tags": [
@@ -1277,6 +1233,64 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ItemOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/mall/items/{item_id}/edit": {
+      "post": {
+        "tags": [
+          "mall"
+        ],
+        "summary": "Edit Item",
+        "description": "编辑自己上架的商品，保存后直接生效。",
+        "operationId": "edit_item_api_v1_mall_items__item_id__edit_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemCreate"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1381,6 +1395,54 @@
         "summary": "Complete Order",
         "description": "服务提供方确认订单已完成。",
         "operationId": "complete_order_api_v1_mall_orders__order_id__complete_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_OrderOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/mall/orders/{order_id}/cancel": {
+      "post": {
+        "tags": [
+          "mall"
+        ],
+        "summary": "Cancel Order",
+        "description": "买家取消待兑现订单，金币原路退回。",
+        "operationId": "cancel_order_api_v1_mall_orders__order_id__cancel_post",
         "security": [
           {
             "HTTPBearer": []
@@ -2246,68 +2308,6 @@
         }
       }
     },
-    "/api/v1/audit": {
-      "get": {
-        "tags": [
-          "audit"
-        ],
-        "summary": "List Mine",
-        "description": "查看自己发起过的敏感操作，时间倒序。",
-        "operationId": "list_mine_api_v1_audit_get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 100,
-              "minimum": 1,
-              "default": 50,
-              "title": "Limit"
-            }
-          },
-          {
-            "name": "offset",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 0,
-              "default": 0,
-              "title": "Offset"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Envelope_list_AuditOut__"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/daily": {
       "get": {
         "tags": [
@@ -2358,6 +2358,78 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Envelope_DailyOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/mood": {
+      "get": {
+        "tags": [
+          "mood"
+        ],
+        "summary": "Today",
+        "description": "今日双方心情。没记录时 mine/partner 为 null。",
+        "operationId": "today_api_v1_mood_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_MoodPairOut_"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "mood"
+        ],
+        "summary": "Save",
+        "description": "提交或修改今天的心情，返回更新后的双方视图。",
+        "operationId": "save_api_v1_mood_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoodCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_MoodPairOut_"
                 }
               }
             }
@@ -2677,53 +2749,6 @@
         ]
       }
     },
-    "/api/v1/sim-ta/chat": {
-      "post": {
-        "tags": [
-          "sim-ta"
-        ],
-        "summary": "Chat",
-        "description": "和对方的分身对话。\n\n需要对方已授权；回复里必须带 disclaimer。",
-        "operationId": "chat_api_v1_sim_ta_chat_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ChatRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Envelope_ChatResponse_"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
     "/api/v1/privacy/delete": {
       "post": {
         "tags": [
@@ -2759,33 +2784,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/privacy/export": {
-      "get": {
-        "tags": [
-          "privacy"
-        ],
-        "summary": "Export Data",
-        "description": "导出自己的全部个人数据（JSON）。",
-        "operationId": "export_data_api_v1_privacy_export_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Envelope_dict_"
                 }
               }
             }
@@ -3066,6 +3064,53 @@
         ]
       }
     },
+    "/api/v1/uploads/evidence": {
+      "post": {
+        "tags": [
+          "uploads"
+        ],
+        "summary": "Upload Evidence",
+        "description": "上传一张金币申请（索要）的照片证明。\n\n前端拿到返回的 `key` 后，把它放进 /coin-applies 的 evidence_key；\n`url` 只用于预览，不要存进数据库。",
+        "operationId": "upload_evidence_api_v1_uploads_evidence_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_evidence_api_v1_uploads_evidence_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_UploadOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/uploads/{key}": {
       "delete": {
         "tags": [
@@ -3087,172 +3132,6 @@
             "schema": {
               "type": "string",
               "title": "Key"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Envelope_NoneType_"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/agent/imports": {
-      "get": {
-        "tags": [
-          "agent"
-        ],
-        "summary": "List Imports",
-        "description": "查看历史导入记录和状态。",
-        "operationId": "list_imports_api_v1_agent_imports_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Envelope_list_ChatImportOut__"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      },
-      "post": {
-        "tags": [
-          "agent"
-        ],
-        "summary": "Import Chat Log",
-        "description": "导入聊天记录。\n\n双方都授权后才能导入。原始文件只在内存里解析，不落盘。\n导入后画像和向量索引在后台完成。",
-        "operationId": "import_chat_log_api_v1_agent_imports_post",
-        "requestBody": {
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "$ref": "#/components/schemas/Body_import_chat_log_api_v1_agent_imports_post"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Envelope_ChatImportOut_"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/agent/imports/{import_id}": {
-      "get": {
-        "tags": [
-          "agent"
-        ],
-        "summary": "Get Import",
-        "description": "查看单次导入的状态和计数。",
-        "operationId": "get_import_api_v1_agent_imports__import_id__get",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "import_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Import Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Envelope_ChatImportOut_"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "agent"
-        ],
-        "summary": "Delete Import",
-        "description": "删除一次导入：消息、向量、画像一起清理。",
-        "operationId": "delete_import_api_v1_agent_imports__import_id__delete",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "import_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Import Id"
             }
           }
         ],
@@ -3406,6 +3285,54 @@
         "summary": "Delete Conversation",
         "description": "删除会话及其全部消息。",
         "operationId": "delete_conversation_api_v1_agent_conversations__conversation_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_NoneType_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/agent/conversations/{conversation_id}/memorize": {
+      "post": {
+        "tags": [
+          "agent"
+        ],
+        "summary": "Memorize Conversation",
+        "description": "把这次对话切块存成长期记忆。\n\n前端在离开「模拟 Ta」页面时调用；重复调用幂等。",
+        "operationId": "memorize_conversation_api_v1_agent_conversations__conversation_id__memorize_post",
         "security": [
           {
             "HTTPBearer": []
@@ -3714,6 +3641,24 @@
             "title": "Repeat Yearly",
             "default": true
           },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "custom",
+              "wedding"
+            ],
+            "title": "Kind",
+            "default": "custom"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "countdown",
+              "elapsed"
+            ],
+            "title": "Mode",
+            "default": "countdown"
+          },
           "idempotency_key": {
             "anyOf": [
               {
@@ -3753,6 +3698,7 @@
             "enum": [
               "relationship",
               "birthday",
+              "wedding",
               "custom"
             ],
             "title": "Source"
@@ -3798,6 +3744,15 @@
             "type": "boolean",
             "title": "Repeat Yearly"
           },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "countdown",
+              "elapsed"
+            ],
+            "title": "Mode",
+            "default": "countdown"
+          },
           "owner_id": {
             "anyOf": [
               {
@@ -3827,7 +3782,7 @@
           "repeat_yearly"
         ],
         "title": "AnniversaryOut",
-        "description": "统一后的倒计时条目。\n\nsource 区分来源：\n- relationship：在一起，来自 couples.bind_at\n- birthday：双方生日，来自 users.birthday\n- custom：用户自定义，来自 anniversaries 表\n\ndate 是原始日期，next_date 是下一次发生的日期。\n一次性事件过期后 days_left 为负数、passed=true。"
+        "description": "统一后的倒计时条目。\n\nsource 区分来源：\n- relationship：在一起，来自 couples.bind_at\n- birthday：双方生日，来自 users.birthday\n- wedding：结婚纪念日，来自 anniversaries 表（kind=wedding）\n- custom：用户自定义，来自 anniversaries 表\n\ndate 是原始日期，next_date 是下一次发生的日期。\n一次性事件过期后 days_left 为负数、passed=true。"
       },
       "AnniversaryUpdate": {
         "properties": {
@@ -3866,6 +3821,36 @@
               }
             ],
             "title": "Repeat Yearly"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "custom",
+                  "wedding"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "countdown",
+                  "elapsed"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode"
           }
         },
         "type": "object",
@@ -3901,6 +3886,18 @@
             "maxLength": 500,
             "minLength": 1,
             "title": "Reason"
+          },
+          "evidence_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Key"
           }
         },
         "type": "object",
@@ -3928,6 +3925,28 @@
           "reason": {
             "type": "string",
             "title": "Reason"
+          },
+          "evidence_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Key"
+          },
+          "evidence_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Url"
           },
           "status": {
             "type": "string",
@@ -3979,6 +3998,7 @@
           "applicant_id",
           "amount",
           "reason",
+          "evidence_key",
           "status",
           "approved_amount",
           "decision_remark",
@@ -4019,92 +4039,6 @@
         "type": "object",
         "title": "ApproveRequest",
         "description": "审批通过。\n\namount 不传则按申请金额发放；\n传了就以传入值为准（可以调高或调低）。"
-      },
-      "AuditOut": {
-        "properties": {
-          "id": {
-            "type": "integer",
-            "title": "Id"
-          },
-          "action": {
-            "type": "string",
-            "title": "Action"
-          },
-          "target_type": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Target Type"
-          },
-          "target_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Target Id"
-          },
-          "detail": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Detail"
-          },
-          "ip": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ip"
-          },
-          "request_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Request Id"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "action",
-          "target_type",
-          "target_id",
-          "detail",
-          "ip",
-          "request_id",
-          "created_at"
-        ],
-        "title": "AuditOut",
-        "description": "一条审计记录。detail 是结构化元信息，不含隐私正文。"
       },
       "BalanceOut": {
         "properties": {
@@ -4330,54 +4264,6 @@
         "title": "BindRequest",
         "description": "用邀请码绑定。\n\n长度放宽到 4-12，容忍客户端传小写或带空格，\nservice 里会统一 strip + upper。"
       },
-      "Body_import_chat_log_api_v1_agent_imports_post": {
-        "properties": {
-          "file": {
-            "type": "string",
-            "contentMediaType": "application/octet-stream",
-            "title": "File",
-            "description": "JSONL 或 JSON 聊天记录"
-          },
-          "format": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Format"
-          },
-          "owner_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Owner Name"
-          },
-          "partner_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Partner Name"
-          }
-        },
-        "type": "object",
-        "required": [
-          "file"
-        ],
-        "title": "Body_import_chat_log_api_v1_agent_imports_post"
-      },
       "Body_upload_avatar_api_v1_uploads_avatar_post": {
         "properties": {
           "file": {
@@ -4407,6 +4293,21 @@
           "file"
         ],
         "title": "Body_upload_diary_image_api_v1_uploads_diary_image_post"
+      },
+      "Body_upload_evidence_api_v1_uploads_evidence_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "JPEG / PNG / WebP，最大 10MB"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_evidence_api_v1_uploads_evidence_post"
       },
       "CategoryStat": {
         "properties": {
@@ -4450,86 +4351,6 @@
         "title": "ChangePasswordRequest",
         "description": "修改密码。新密码长度和注册保持一致。"
       },
-      "ChatImportOut": {
-        "properties": {
-          "id": {
-            "type": "integer",
-            "title": "Id"
-          },
-          "filename": {
-            "type": "string",
-            "title": "Filename"
-          },
-          "format": {
-            "type": "string",
-            "title": "Format"
-          },
-          "status": {
-            "type": "string",
-            "title": "Status"
-          },
-          "total_messages": {
-            "type": "integer",
-            "title": "Total Messages"
-          },
-          "imported_messages": {
-            "type": "integer",
-            "title": "Imported Messages"
-          },
-          "indexed_windows": {
-            "type": "integer",
-            "title": "Indexed Windows"
-          },
-          "skipped_messages": {
-            "type": "integer",
-            "title": "Skipped Messages"
-          },
-          "error": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Error"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          },
-          "finished_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Finished At"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "filename",
-          "format",
-          "status",
-          "total_messages",
-          "imported_messages",
-          "indexed_windows",
-          "skipped_messages",
-          "error",
-          "created_at",
-          "finished_at"
-        ],
-        "title": "ChatImportOut",
-        "description": "一次聊天记录导入的状态。"
-      },
       "ChatIn": {
         "properties": {
           "message": {
@@ -4553,46 +4374,6 @@
         ],
         "title": "ChatIn",
         "description": "一轮对话请求。\n\nhistory 只在会话设置为不保存时使用；\n服务端保存的会话会自动读取历史，不需要重复传。"
-      },
-      "ChatRequest": {
-        "properties": {
-          "message": {
-            "type": "string",
-            "maxLength": 2000,
-            "minLength": 1,
-            "title": "Message"
-          }
-        },
-        "type": "object",
-        "required": [
-          "message"
-        ],
-        "title": "ChatRequest",
-        "description": "对分身说一句话。"
-      },
-      "ChatResponse": {
-        "properties": {
-          "reply": {
-            "type": "string",
-            "title": "Reply"
-          },
-          "fidelity": {
-            "type": "string",
-            "title": "Fidelity"
-          },
-          "disclaimer": {
-            "type": "string",
-            "title": "Disclaimer"
-          }
-        },
-        "type": "object",
-        "required": [
-          "reply",
-          "fidelity",
-          "disclaimer"
-        ],
-        "title": "ChatResponse",
-        "description": "分身回复。\n\ndisclaimer 必须和 reply 一起展示：\n不能让用户把模拟内容误当成真人的真实表达。"
       },
       "ChatTurn": {
         "properties": {
@@ -4789,6 +4570,39 @@
             "type": "string",
             "format": "date-time",
             "title": "Bind At"
+          },
+          "start_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "partner": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PartnerOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -4799,7 +4613,26 @@
           "bind_at"
         ],
         "title": "CoupleOut",
-        "description": "关系信息。不暴露 status/unbound_at，活跃关系由 /couples/me 保证。"
+        "description": "关系信息。不暴露 status/unbound_at，活跃关系由 /couples/me 保证。\n\nstart_date 为空时，客户端按 bind_at 的日期兜底显示。\npartner 是当前请求者的另一半，只在 /couples/me 里填。"
+      },
+      "CoupleUpdate": {
+        "properties": {
+          "start_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
+          }
+        },
+        "type": "object",
+        "title": "CoupleUpdate",
+        "description": "更新关系资料。目前只开放「在一起」的起始日。\n\n传 null 表示清空，显示时会退回 bind_at 的日期。"
       },
       "DailyOut": {
         "properties": {
@@ -4885,8 +4718,8 @@
           "content": {
             "type": "string",
             "maxLength": 20000,
-            "minLength": 1,
-            "title": "Content"
+            "title": "Content",
+            "default": ""
           },
           "mood_tags": {
             "items": {
@@ -4942,9 +4775,6 @@
           }
         },
         "type": "object",
-        "required": [
-          "content"
-        ],
         "title": "DiaryCreate",
         "description": "创建日记。\n\nevent_id 由客户端生成（通常是 UUID）：\n两个人写同一件事时传同一个值，就能在查询时把两种视角聚到一起。"
       },
@@ -5066,8 +4896,7 @@
             "anyOf": [
               {
                 "type": "string",
-                "maxLength": 20000,
-                "minLength": 1
+                "maxLength": 20000
               },
               {
                 "type": "null"
@@ -5278,58 +5107,6 @@
         "type": "object",
         "title": "Envelope[BillStats]"
       },
-      "Envelope_ChatImportOut_": {
-        "properties": {
-          "code": {
-            "type": "integer",
-            "title": "Code",
-            "default": 0
-          },
-          "message": {
-            "type": "string",
-            "title": "Message",
-            "default": "success"
-          },
-          "data": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ChatImportOut"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "type": "object",
-        "title": "Envelope[ChatImportOut]"
-      },
-      "Envelope_ChatResponse_": {
-        "properties": {
-          "code": {
-            "type": "integer",
-            "title": "Code",
-            "default": 0
-          },
-          "message": {
-            "type": "string",
-            "title": "Message",
-            "default": "success"
-          },
-          "data": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ChatResponse"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "type": "object",
-        "title": "Envelope[ChatResponse]"
-      },
       "Envelope_ConversationDetailOut_": {
         "properties": {
           "code": {
@@ -5511,6 +5288,32 @@
         },
         "type": "object",
         "title": "Envelope[ItemOut]"
+      },
+      "Envelope_MoodPairOut_": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 0
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "success"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MoodPairOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "Envelope[MoodPairOut]"
       },
       "Envelope_NoneType_": {
         "properties": {
@@ -5818,6 +5621,32 @@
         "type": "object",
         "title": "Envelope[UploadOut]"
       },
+      "Envelope_UsStatsOut_": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 0
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "success"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UsStatsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "Envelope[UsStatsOut]"
+      },
       "Envelope_UserOut_": {
         "properties": {
           "code": {
@@ -5932,36 +5761,6 @@
         "type": "object",
         "title": "Envelope[list[ApplyOut]]"
       },
-      "Envelope_list_AuditOut__": {
-        "properties": {
-          "code": {
-            "type": "integer",
-            "title": "Code",
-            "default": 0
-          },
-          "message": {
-            "type": "string",
-            "title": "Message",
-            "default": "success"
-          },
-          "data": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/AuditOut"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Data"
-          }
-        },
-        "type": "object",
-        "title": "Envelope[list[AuditOut]]"
-      },
       "Envelope_list_BillOut__": {
         "properties": {
           "code": {
@@ -5991,36 +5790,6 @@
         },
         "type": "object",
         "title": "Envelope[list[BillOut]]"
-      },
-      "Envelope_list_ChatImportOut__": {
-        "properties": {
-          "code": {
-            "type": "integer",
-            "title": "Code",
-            "default": 0
-          },
-          "message": {
-            "type": "string",
-            "title": "Message",
-            "default": "success"
-          },
-          "data": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/ChatImportOut"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Data"
-          }
-        },
-        "type": "object",
-        "title": "Envelope[list[ChatImportOut]]"
       },
       "Envelope_list_ConversationOut__": {
         "properties": {
@@ -6335,26 +6104,6 @@
         "title": "InviteOut",
         "description": "邀请码返回。客户端展示 code，并提示 24 小时内有效。"
       },
-      "ItemApprove": {
-        "properties": {
-          "price_coins": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "maximum": 100000.0,
-                "exclusiveMinimum": 0.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Price Coins"
-          }
-        },
-        "type": "object",
-        "title": "ItemApprove",
-        "description": "审批通过。price_coins 不传则沿用创建者的建议价。"
-      },
       "ItemCreate": {
         "properties": {
           "title": {
@@ -6401,7 +6150,7 @@
           "price_coins"
         ],
         "title": "ItemCreate",
-        "description": "上架商品。提交后进入待审批状态，对方确认价格后才真正上架。"
+        "description": "上架商品。提交后直接上架，无需对方审批。"
       },
       "ItemOut": {
         "properties": {
@@ -6432,17 +6181,6 @@
             "type": "integer",
             "title": "Price Coins"
           },
-          "approved_price": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Approved Price"
-          },
           "max_orders": {
             "anyOf": [
               {
@@ -6458,17 +6196,6 @@
             "type": "string",
             "title": "Status"
           },
-          "reject_reason": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reject Reason"
-          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -6482,33 +6209,12 @@
           "title",
           "description",
           "price_coins",
-          "approved_price",
           "max_orders",
           "status",
-          "reject_reason",
           "created_at"
         ],
         "title": "ItemOut",
-        "description": "商品信息。同时暴露建议价和最终价，前端可展示“议价”过程。"
-      },
-      "ItemReject": {
-        "properties": {
-          "reason": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 200
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reason"
-          }
-        },
-        "type": "object",
-        "title": "ItemReject",
-        "description": "拒绝上架。"
+        "description": "商品信息。"
       },
       "LoginRequest": {
         "properties": {
@@ -6577,6 +6283,147 @@
           "created_at"
         ],
         "title": "MessageOut"
+      },
+      "MoodCreate": {
+        "properties": {
+          "mood": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "awesome",
+                  "happy",
+                  "calm",
+                  "tired",
+                  "low"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mood"
+          },
+          "level": {
+            "type": "integer",
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Level",
+            "default": 3
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "title": "MoodCreate",
+        "description": "提交或修改今天的心情。\n\n两种写法都收：\n- 选了心情（可以顺手带一句备注）\n- 只写字、不选心情 —— 这时 mood 留空，level 用中间值兜底\n\n只要求「心情」和「备注」至少给一个，不能整条空白。"
+      },
+      "MoodOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "day": {
+            "type": "string",
+            "format": "date",
+            "title": "Day"
+          },
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "mood": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "awesome",
+                  "happy",
+                  "calm",
+                  "tired",
+                  "low"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mood"
+          },
+          "level": {
+            "type": "integer",
+            "title": "Level"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "day",
+          "user_id",
+          "level",
+          "note"
+        ],
+        "title": "MoodOut",
+        "description": "单条心情。\n\nmood 可以为空：光写一句话、不标情绪也是合法的一天。"
+      },
+      "MoodPairOut": {
+        "properties": {
+          "day": {
+            "type": "string",
+            "format": "date",
+            "title": "Day"
+          },
+          "mine": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MoodOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "partner": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MoodOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "day",
+          "mine",
+          "partner"
+        ],
+        "title": "MoodPairOut",
+        "description": "今日双方心情：自己的一条 + 对方的一条。"
       },
       "NotificationOut": {
         "properties": {
@@ -6727,6 +6574,36 @@
         ],
         "title": "OrderOut",
         "description": "订单。price 是下单时的成交价快照。"
+      },
+      "PartnerOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "nickname": {
+            "type": "string",
+            "title": "Nickname"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nickname"
+        ],
+        "title": "PartnerOut",
+        "description": "关系里的另一半。日记页要按 author_id 分「我 / TA」，还得把昵称显示出来。"
       },
       "PersonaStateOut": {
         "properties": {
@@ -6890,11 +6767,6 @@
               }
             ],
             "title": "Cost Coins"
-          },
-          "is_burn_after_read": {
-            "type": "boolean",
-            "title": "Is Burn After Read",
-            "default": false
           }
         },
         "type": "object",
@@ -6902,7 +6774,7 @@
           "content"
         ],
         "title": "SecretCreate",
-        "description": "发布秘密。\n\ncost_coins 不传时按 level 取默认值。\n作者可以自己定价：定低是“希望你快读”，定高是“这件事对我很重要”。"
+        "description": "发布秘密。\n\ncost_coins 不传时按 level 取默认值。\n作者可以自己定价：定低是“希望你快读”，定高是“这件事对我很重要”。\n没有「阅后即焚」开关：规则只有一条，摘下来看完就销毁。"
       },
       "SecretDetail": {
         "properties": {
@@ -6922,10 +6794,6 @@
             "type": "integer",
             "title": "Cost Coins"
           },
-          "is_burn_after_read": {
-            "type": "boolean",
-            "title": "Is Burn After Read"
-          },
           "status": {
             "type": "string",
             "title": "Status"
@@ -6942,7 +6810,6 @@
           "content",
           "level",
           "cost_coins",
-          "is_burn_after_read",
           "status",
           "created_at"
         ],
@@ -6962,10 +6829,6 @@
           "cost_coins": {
             "type": "integer",
             "title": "Cost Coins"
-          },
-          "is_burn_after_read": {
-            "type": "boolean",
-            "title": "Is Burn After Read"
           },
           "status": {
             "type": "string",
@@ -6990,7 +6853,6 @@
           "id",
           "level",
           "cost_coins",
-          "is_burn_after_read",
           "status",
           "authored_by_me",
           "viewed",
@@ -7008,12 +6870,12 @@
               "idealized"
             ],
             "title": "Fidelity",
-            "default": "faithful"
+            "default": "idealized"
           }
         },
         "type": "object",
         "title": "SettingsRequest",
-        "description": "切换忠实度。默认更贴近真实。"
+        "description": "切换忠实度。默认更理想化。"
       },
       "TodoCompleteOut": {
         "properties": {
@@ -7413,6 +7275,78 @@
         ],
         "title": "UploadOut",
         "description": "上传成功后的结果。\n\n前端应该把 `key` 存进日记的 images 数组，\n展示时用 `url`；不要反过来把 url 存进数据库。"
+      },
+      "UsStatsOut": {
+        "properties": {
+          "days_together": {
+            "type": "integer",
+            "title": "Days Together"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          },
+          "diaries": {
+            "type": "integer",
+            "title": "Diaries",
+            "default": 0
+          },
+          "secrets": {
+            "type": "integer",
+            "title": "Secrets",
+            "default": 0
+          },
+          "todos_pending": {
+            "type": "integer",
+            "title": "Todos Pending",
+            "default": 0
+          },
+          "todos_done": {
+            "type": "integer",
+            "title": "Todos Done",
+            "default": 0
+          },
+          "bills": {
+            "type": "integer",
+            "title": "Bills",
+            "default": 0
+          },
+          "anniversaries": {
+            "type": "integer",
+            "title": "Anniversaries",
+            "default": 0
+          },
+          "coins": {
+            "type": "integer",
+            "title": "Coins",
+            "default": 0
+          },
+          "partner_nickname": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partner Nickname"
+          }
+        },
+        "type": "object",
+        "required": [
+          "days_together"
+        ],
+        "title": "UsStatsOut",
+        "description": "解绑前给两个人看的那张「你们攒下了什么」。\n\n只读、只统计，不参与任何业务判断。"
       },
       "UserOut": {
         "properties": {

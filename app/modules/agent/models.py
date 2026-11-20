@@ -1,19 +1,20 @@
 """AI 对话服务的表结构。
 
-三张表：
 - agent_conversations：一次多轮对话
 - agent_messages：对话里的每条消息（加密）
-- persona_profiles：从聊天记录提炼出的风格画像
+- agent_actions：模型提议的写操作，等待用户确认
+- chat_memories：对话切块后的长期记忆（比会话活得久）
 
 会话默认保留 30 天，每次新消息顺延；过期由 worker 清理。
 """
 
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -21,7 +22,6 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -76,76 +76,6 @@ class AgentMessage(Base):
     )
 
 
-class ChatImport(Base):
-    """一次聊天记录导入。
-
-    原始文件不落盘；解析出的消息存 chat_messages。
-    """
-
-    __tablename__ = "chat_imports"
-
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    couple_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("couples.id"))
-    uploaded_by: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
-    filename: Mapped[str] = mapped_column(String(255))
-    format: Mapped[str] = mapped_column(String(20))
-    # processing / done / failed
-    status: Mapped[str] = mapped_column(
-        String(20), default="processing", server_default="processing"
-    )
-    total_messages: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
-    imported_messages: Mapped[int] = mapped_column(
-        BigInteger, default=0, server_default="0"
-    )
-    indexed_windows: Mapped[int] = mapped_column(
-        BigInteger, default=0, server_default="0"
-    )
-    # 解析失败或发送人对不上的条数
-    skipped_messages: Mapped[int] = mapped_column(
-        BigInteger, default=0, server_default="0"
-    )
-    error: Mapped[str | None] = mapped_column(EncryptedText)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-
-    __table_args__ = (
-        CheckConstraint(
-            "status IN ('processing', 'done', 'failed')", name="ck_chat_import_status"
-        ),
-        Index("ix_chat_imports_couple", "couple_id", "created_at"),
-    )
-
-
-class ChatMessage(Base):
-    """一条聊天消息。内容加密。
-
-    source_hash 用于去重：同一条消息重复导入时不会产生两份。
-    """
-
-    __tablename__ = "chat_messages"
-
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    couple_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("couples.id"))
-    import_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("chat_imports.id"))
-    # 能对上用户就填；对不上时只保留昵称
-    sender_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("users.id"))
-    sender_name: Mapped[str] = mapped_column(String(100))
-    sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    content: Mapped[str] = mapped_column(EncryptedText)
-    msg_type: Mapped[str] = mapped_column(String(20), default="text", server_default="text")
-    source_hash: Mapped[str] = mapped_column(String(64))
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-
-    __table_args__ = (
-        UniqueConstraint("couple_id", "source_hash", name="uq_chat_message_hash"),
-        Index("ix_chat_messages_couple_sender", "couple_id", "sender_id", "sent_at"),
-    )
-
-
 class AgentAction(Base):
     """Agent 提议的写操作，等待用户确认。
 
@@ -187,29 +117,40 @@ class AgentAction(Base):
     )
 
 
-class PersonaProfile(Base):
-    """某个用户的说话风格画像。
+class ChatMemory(Base):
+    """把「我和分身聊过的内容」切成块，作为长期记忆。
 
-    由聊天记录导入后生成：
-    - style_summary：一段自然语言描述，直接进 system prompt
-    - samples_json：代表性原话，JSON 数组，加密
-    - stats：统计指标（长度、表情率等），不含原文，明文存
+    会话本身 30 天就清了，记忆要活得更久，所以单独落表：
+    PG 是真相，Chroma 只是它的索引，随时可重建。
+
+    - day 按北京时间切天，同一天的对话落进同一批块
+    - seq 是当天第几块，和 day 一起保证同一条会话重复处理时是覆盖而不是堆积
     """
 
-    __tablename__ = "persona_profiles"
+    __tablename__ = "chat_memories"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     couple_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("couples.id"))
-    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
-    style_summary: Mapped[str | None] = mapped_column(EncryptedText)
-    # JSON 数组字符串，加密
-    samples_json: Mapped[str | None] = mapped_column(EncryptedText)
-    # 纯统计，不含内容，可以明文
-    stats: Mapped[dict | None] = mapped_column(JSONB)
+    # 记忆归属：谁跟分身聊的。检索时按它过滤，别人看不到你的对话
+    owner_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
+    # 被模拟的人，用于将来区分「模拟谁」的记忆
+    target_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
+    # 来源会话；不设外键，因为会话过期会被清理，记忆要留着
+    conversation_id: Mapped[int] = mapped_column(BigInteger)
+    day: Mapped[date] = mapped_column(Date)
+    seq: Mapped[int] = mapped_column(BigInteger)
+    # 块原文：日期头 + 每行带说话人，加密
+    text: Mapped[str] = mapped_column(EncryptedText)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
     __table_args__ = (
-        UniqueConstraint("couple_id", "user_id", name="uq_persona_profile_couple_user"),
+        UniqueConstraint(
+            "conversation_id", "day", "seq", name="uq_chat_memory_conv_day_seq"
+        ),
+        Index("ix_chat_memory_owner_day", "owner_id", "day"),
     )

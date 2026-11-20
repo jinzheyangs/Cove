@@ -6,7 +6,9 @@
 - 自定义：anniversaries 表，双方都能改
 """
 
+import re
 from datetime import date as date_type
+from datetime import timedelta
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -23,6 +25,10 @@ from app.modules.anniversaries.schemas import (
 )
 from app.modules.couples.models import Couple
 from app.modules.users.models import User
+
+# 点节点收藏出来的条目标题：「在一起 · 第 300 天」/「在一起 · 1 周年」
+_NODE_DAY = re.compile(r"^(.+?)\s*·\s*第\s*(\d+)\s*天$")
+_NODE_YEAR = re.compile(r"^(.+?)\s*·\s*(\d+)\s*周年$")
 
 
 def _with_year(anchor: date_type, year: int) -> date_type:
@@ -63,6 +69,7 @@ def _build_entry(
     anchor: date_type,
     repeat_yearly: bool,
     day: date_type,
+    mode: str = "countdown",
     entry_id: int | None = None,
     owner_id: int | None = None,
     editable: bool = False,
@@ -80,9 +87,29 @@ def _build_entry(
         is_today=days_left == 0,
         passed=days_left < 0,
         repeat_yearly=repeat_yearly,
+        mode=mode,
         owner_id=owner_id,
         editable=editable,
     )
+
+
+def _mode_for(kind: str | None, mode: str | None) -> str:
+    """读数方向只看用户选的 mode。
+
+    kind 只是早期的分类残留（custom / wedding），现在页面上只分「目标日 / 起始日」，
+    不再让它覆盖用户的选择；存量 wedding 行的 mode 在迁移里已经置成 elapsed。
+    """
+    return mode or "countdown"
+
+
+def _guard_elapsed_in_past(mode: str, anchor: date_type, day: date_type) -> None:
+    """起始日是「从那天起算」的，起始日不能在未来——否则会显示负数的天数。"""
+    if mode == "elapsed" and anchor > day:
+        raise AppError(
+            "起始日要从已经发生的日子算起，日期不能晚于今天",
+            code=18002,
+            status_code=422,
+        )
 
 
 def _sort_key(entry: AnniversaryOut) -> tuple[int, int]:
@@ -92,13 +119,35 @@ def _sort_key(entry: AnniversaryOut) -> tuple[int, int]:
     return (1, -entry.days_left)
 
 
+def _node_anchor(title: str | None, rel_title: str, start: date_type) -> date_type | None:
+    """「在一起 · 第 N 天 / N 周年」这类条目是从起始日派生出来的。
+
+    用户点节点把它单独收藏成了一条日子，日期当时就落库了；
+    起始日一改，库里还是旧日期，首页和页头就会挂着「271 天」这种旧数。
+    这里按当前起始日算回正确的日期，读取端一处改、所有页面都对。
+    认不出来的标题（自己起的名字）原样返回 None，不动。
+    """
+    if not title:
+        return None
+    day_m = _NODE_DAY.match(title)
+    if day_m and day_m.group(1).strip() == rel_title:
+        return start + timedelta(days=int(day_m.group(2)) - 1)
+    year_m = _NODE_YEAR.match(title)
+    if year_m and year_m.group(1).strip() == rel_title:
+        return _with_year(start, start.year + int(year_m.group(2)))
+    return None
+
+
 async def _bind_day(session: AsyncSession, couple: Couple) -> date_type:
     """关系的起始日期（北京时间）。
 
+    优先用用户填的 start_date；没填时退回绑定那天。
     测试里 couple 可能还没刷新出 server_default，这里补一次。
     """
-    if couple.bind_at is None:
+    if couple.bind_at is None and couple.start_date is None:
         await session.refresh(couple)
+    if couple.start_date is not None:
+        return couple.start_date
     if couple.bind_at is None:
         return today()
     return couple.bind_at.astimezone(TZ).date()
@@ -114,14 +163,17 @@ async def list_entries(
     day = day or today()
     entries: list[AnniversaryOut] = []
 
-    # 1. 在一起：直接由绑定时间计算
+    # 1. 在一起：直接由绑定时间计算。这是「起点」，主读数看已经多少天
+    bind = await _bind_day(session, couple)
+    rel_title = "在一起"
     entries.append(
         _build_entry(
             source="relationship",
-            title="在一起",
-            anchor=await _bind_day(session, couple),
+            title=rel_title,
+            anchor=bind,
             repeat_yearly=True,
             day=day,
+            mode="elapsed",
         )
     )
 
@@ -146,15 +198,19 @@ async def list_entries(
                 )
             )
 
-    # 3. 自定义纪念日
+    # 3. 自定义纪念日（含结婚纪念日，两者只是 kind 不同）
     for row in await repo.list_by_couple(session, couple.id):
+        node = None
+        if (row.kind or "custom") == "custom":
+            node = _node_anchor(row.title, rel_title, bind)
         entries.append(
             _build_entry(
-                source="custom",
+                source=row.kind or "custom",
                 title=row.title,
-                anchor=row.date,
+                anchor=node or row.date,
                 repeat_yearly=row.repeat_yearly,
                 day=day,
+                mode=_mode_for(row.kind, row.mode),
                 entry_id=row.id,
                 owner_id=row.created_by,
                 editable=True,
@@ -168,11 +224,12 @@ async def list_entries(
 def to_out(row: Anniversary, *, day: date_type | None = None) -> AnniversaryOut:
     """把自定义纪念日转成统一的倒计时结构。"""
     return _build_entry(
-        source="custom",
+        source=row.kind or "custom",
         title=row.title,
         anchor=row.date,
         repeat_yearly=row.repeat_yearly,
         day=day or today(),
+        mode=_mode_for(row.kind, row.mode),
         entry_id=row.id,
         owner_id=row.created_by,
         editable=True,
@@ -188,6 +245,9 @@ async def create(
     day: date_type | None = None,
 ) -> AnniversaryOut:
     """新建自定义纪念日。"""
+    current = day or today()
+    _guard_elapsed_in_past(_mode_for(body.kind, body.mode), body.date, current)
+
     key = body.idempotency_key
     if key:
         existing = await repo.get_by_idempotency_key(session, couple.id, key)
@@ -200,6 +260,8 @@ async def create(
             couple_id=couple.id,
             created_by=user.id,
             title=body.title,
+            kind=body.kind,
+            mode=_mode_for(body.kind, body.mode),
             date=body.date,
             repeat_yearly=body.repeat_yearly,
             idempotency_key=key,
@@ -241,10 +303,18 @@ async def update(
 
     if body.title is not None:
         row.title = body.title
+    if body.kind is not None:
+        row.kind = body.kind
+        # 改成结婚纪念日时读数方向跟着变，不留旧的 countdown
+        row.mode = _mode_for(body.kind, body.mode)
+    elif body.mode is not None:
+        row.mode = _mode_for(row.kind, body.mode)
     if body.date is not None:
         row.date = body.date
     if body.repeat_yearly is not None:
         row.repeat_yearly = body.repeat_yearly
+
+    _guard_elapsed_in_past(row.mode, row.date, day or today())
 
     await session.commit()
     await session.refresh(row)

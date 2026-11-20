@@ -1,7 +1,6 @@
 """隐私操作的 HTTP 接口。
 
 - POST /privacy/delete：注销账号（不可逆）
-- GET  /privacy/export：导出个人数据
 """
 
 from fastapi import APIRouter
@@ -25,9 +24,3 @@ async def delete_account(
     """
     await service.delete_account(session, user, body.password)
     return Envelope()
-
-
-@router.get("/export", response_model=Envelope[dict])
-async def export_data(user: CurrentUser, session: SessionDep) -> Envelope[dict]:
-    """导出自己的全部个人数据（JSON）。"""
-    return Envelope(data=await service.export_data(session, user))
