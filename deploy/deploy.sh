@@ -110,24 +110,33 @@ for _ in $(seq 1 60); do
 done
 
 # ---------- 健康检查 ----------
-log "健康检查"
+# 直接打 api 容器端口，绕开 caddy：DOMAIN 配了域名时 caddy 会把 80 重定向到 443，
+# 打 http://127.0.0.1/health 只会拿到 308，验不出后端是否真的活着。
+HEALTH_URL="http://127.0.0.1:8000/health"
+log "健康检查（$HEALTH_URL）"
 for _ in $(seq 1 30); do
-  if curl -fsS http://127.0.0.1/health >/dev/null 2>&1; then
+  if curl -fsS "$HEALTH_URL" >/dev/null 2>&1; then
     echo "HTTP 健康检查通过"
-    curl -s http://127.0.0.1/health
+    curl -s "$HEALTH_URL"
     echo
     break
   fi
   sleep 2
 done
 
-if ! curl -fsS http://127.0.0.1/health >/dev/null 2>&1; then
+if ! curl -fsS "$HEALTH_URL" >/dev/null 2>&1; then
   echo "健康检查未通过，看一下日志："
   $COMPOSE ps
   echo "--- api 日志 ---"
   $COMPOSE logs api --tail 40
   exit 1
 fi
+
+# ---------- 灌种子题库 ----------
+# daily_questions 不在 alembic 迁移里，靠这个脚本建表 + 灌数据，幂等可重复跑。
+log "灌入每日问答题库"
+$COMPOSE exec -T api uv run --no-sync python scripts/seed_daily_questions.py 2>&1 | tail -3 \
+  || echo "种子题库脚本失败，可手动补跑：$COMPOSE exec -T api uv run --no-sync python scripts/seed_daily_questions.py"
 
 log "容器状态"
 $COMPOSE ps
