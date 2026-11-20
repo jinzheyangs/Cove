@@ -6,6 +6,10 @@
 #   2. .env 单独上传到 /opt/cove/.env（不在仓库里）
 #   3. sudo bash /opt/cove/deploy/deploy.sh
 #
+# 小内存机器（1 GiB）不要在服务器上构建，会 OOM（exit 137）。
+# 改为在本地 docker save 打包镜像，传到服务器 docker load 之后：
+#   sudo SKIP_BUILD=1 bash /opt/cove/deploy/deploy.sh
+#
 # 脚本做的事：装 Docker → 建 swap（内存不足时）→ 配防火墙 → 起 compose → 等迁移 → 健康检查
 set -euo pipefail
 
@@ -78,9 +82,15 @@ if command -v ufw >/dev/null 2>&1; then
 fi
 
 # ---------- 起服务 ----------
-log "构建并启动（首次会跑 migrate，然后起 api / agent / worker / caddy / pg / redis / chroma）"
 mkdir -p "$APP_DIR/uploads" "$APP_DIR/logs"
-$COMPOSE up -d --build
+
+if [ "${SKIP_BUILD:-0}" = "1" ]; then
+  log "跳过构建（SKIP_BUILD=1），直接用已加载的镜像启动"
+  $COMPOSE up -d --no-build
+else
+  log "构建并启动（首次会跑 migrate，然后起 api / agent / worker / caddy / pg / redis / chroma）"
+  $COMPOSE up -d --build
+fi
 
 # ---------- 等迁移 ----------
 log "等待数据库迁移完成"
