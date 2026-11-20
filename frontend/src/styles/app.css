@@ -25,7 +25,10 @@
 }
 
 *{ box-sizing:border-box; }
-html,body{ height:100%; margin:0; }
+/* 整页锁死不滚动：这是 fixed 布局，本来就不该有文档级滚动。
+   更要紧的是 iOS——输入框聚焦时 Safari 会想办法把页面滚起来去"露出"输入框，
+   一旦文档能滚，整个 App 就被推上去一截，底部导航和输入框全错位。 */
+html,body{ height:100%; margin:0; overflow:hidden; overscroll-behavior:none; }
 /* iOS Safari 的 text-size-adjust 默认是 auto：视口一变（横竖屏、工具栏收起、
    页面缩放）它会自作主张放大正文字号，user-scalable=no 也压不住，
    看起来就像"整体比例不对"。锁成 100%，字号才和设计稿保持一致。 */

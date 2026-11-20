@@ -384,17 +384,21 @@ const vv = typeof window !== 'undefined' ? window.visualViewport : null;
 
 function syncViewport() {
   const el = chatRoot.value;
-  if (!el || !vv) return;
-  const keyboard = window.innerHeight - vv.height;
-  if (window.innerWidth > 560 || keyboard < 40) {
+  if (!el || !vv || window.innerWidth > 560) return;
+  const kb = window.innerHeight - vv.height;
+  const shift = Math.max(0, vv.offsetTop);
+  /* iOS 有两种表现：有时它会缩小可视视口（kb 明显为正），
+     有时只是把整页往上滚一段去露出输入框（该缩小却没缩小、offsetTop 变正）。
+     两种都得接住，不然输入框就停在半截位置。 */
+  if (kb < 40 && shift < 40) {
     el.style.top = '';
     el.style.height = '';
     el.style.bottom = '';
     el.classList.remove('kb');
     return;
   }
-  el.style.top = Math.max(0, vv.offsetTop) + 'px';
-  el.style.height = vv.height + 'px';
+  el.style.top = shift + 'px';
+  el.style.height = (kb >= 40 ? vv.height : window.innerHeight - shift) + 'px';
   el.style.bottom = 'auto';
   el.classList.add('kb');
 }

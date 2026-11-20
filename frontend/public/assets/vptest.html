@@ -9,9 +9,13 @@
   body{margin:0;padding:14px;background:#0d0d10;color:#e8e8ee;
        font:13px/1.6 -apple-system,"SF Mono",ui-monospace,monospace}
   h1{font-size:17px;margin:0 0 4px;font-weight:700}
-  .hint{color:#7b7b8a;font-size:12px;margin:0 0 12px}
+  .hint{color:#7b7b8a;font-size:12px;margin:0 0 10px}
+  input{width:100%;height:44px;padding:0 14px;border:0;border-radius:22px;
+        background:#fff;color:#111;font-size:15px;margin-bottom:12px}
+  #live{background:#1b1b22;border:1px solid #3a3a46;border-radius:10px;
+        padding:10px;margin-bottom:14px;font-size:14px;line-height:1.8;color:#9ee6a0}
   .row{display:flex;gap:10px;justify-content:space-between;
-       border-bottom:1px solid #22222a;padding:7px 0}
+       border-bottom:1px solid #22222a;padding:6px 0}
   .k{color:#7ea6d0;flex:0 0 auto}
   .v{color:#ffd479;font-weight:600;text-align:right;word-break:break-all}
   .ua{margin-top:12px;color:#6f6f7d;font-size:11px;word-break:break-all}
@@ -19,45 +23,59 @@
 </head>
 <body>
 <h1>Cove 视口探针</h1>
-<p class="hint">截图这一页发给我，就能定位比例问题出在哪。</p>
+<p class="hint">点一下输入框让键盘弹起，然后把整页截图发我。</p>
+<input id="inp" placeholder="点这里弹键盘">
+<div id="live">键盘还没弹起来</div>
 <div id="out"></div>
 <div class="ua" id="ua"></div>
 <script>
 (function () {
+  var vv = window.visualViewport;
+  var inp = document.getElementById('inp');
+  var live = document.getElementById('live');
+
+  function tick() {
+    if (!vv) { live.textContent = '浏览器不支持 visualViewport'; return; }
+    var kb = window.innerHeight - vv.height;
+    live.innerHTML =
+      'innerHeight = ' + window.innerHeight + '<br>' +
+      'vv.height = ' + Math.round(vv.height) + '<br>' +
+      'vv.offsetTop = ' + Math.round(vv.offsetTop) + '<br>' +
+      '推算键盘高 = ' + Math.round(kb) + 'px' + '<br>' +
+      '页面 scrollY = ' + Math.round(window.scrollY);
+  }
+
+  tick();
+  if (vv) {
+    vv.addEventListener('resize', tick);
+    vv.addEventListener('scroll', tick);
+  }
+  inp.addEventListener('focus', function () { setTimeout(tick, 60); setTimeout(tick, 350); });
+  inp.addEventListener('blur', function () { setTimeout(tick, 60); setTimeout(tick, 350); });
+  window.addEventListener('scroll', tick);
+
+  /* 静态参数 */
   var probe = document.createElement('div');
   probe.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0;' +
-    'padding-top:env(safe-area-inset-top,0px);' +
-    'padding-bottom:env(safe-area-inset-bottom,0px);visibility:hidden';
+    'padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);visibility:hidden';
   document.body.appendChild(probe);
   var cs = getComputedStyle(probe);
   var px = function (v) { return Math.round(parseFloat(v) || 0); };
   var root = getComputedStyle(document.documentElement);
-  var vv = window.visualViewport;
-
   var rows = [
     ['窗口 innerWidth × innerHeight', window.innerWidth + ' × ' + window.innerHeight],
     ['文档 clientWidth × clientHeight',
       document.documentElement.clientWidth + ' × ' + document.documentElement.clientHeight],
-    ['可视视口 visualViewport',
-      vv ? Math.round(vv.width) + ' × ' + Math.round(vv.height) + '　scale ' + vv.scale.toFixed(2) : '不支持'],
     ['设备像素比 DPR', String(window.devicePixelRatio)],
     ['屏幕 screen.w × h', screen.width + ' × ' + screen.height],
     ['安全区 top / bottom', px(cs.paddingTop) + 'px / ' + px(cs.paddingBottom) + 'px'],
     ['--phone-w / --phone-h',
       root.getPropertyValue('--phone-w').trim() + ' / ' + root.getPropertyValue('--phone-h').trim()],
-    ['实际手机壳 .phone 尺寸', (function () {
-      var el = document.querySelector('.phone');
-      if (!el) return '未找到 .phone';
-      var r = el.getBoundingClientRect();
-      return Math.round(r.width) + ' × ' + Math.round(r.height);
-    })()],
     ['命中 max-width:560px', String(matchMedia('(max-width:560px)').matches)],
     ['命中 max-height:900px', String(matchMedia('(max-height:900px)').matches)],
-    ['命中 max-height:860px', String(matchMedia('(max-height:860px)').matches)],
     ['独立模式 standalone', String(matchMedia('(display-mode: standalone)').matches)],
-    ['文字缩放 text-size-adjust', root.getPropertyValue('-webkit-text-size-adjust').trim() || root.getPropertyValue('text-size-adjust').trim() || 'auto(未设置)']
+    ['text-size-adjust', root.getPropertyValue('-webkit-text-size-adjust').trim() || 'auto(未设置)']
   ];
-
   var out = document.getElementById('out');
   rows.forEach(function (r) {
     var d = document.createElement('div'); d.className = 'row';
