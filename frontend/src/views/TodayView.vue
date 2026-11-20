@@ -291,13 +291,15 @@ onBeforeUnmount(() => {
   background: linear-gradient(180deg, rgba(255, 255, 255, .92), rgba(255, 255, 255, .78));
 }
 
-/* 内容滚动区：占满剩余高度，左右内边距，底部给底部导航留空间 */
+/* 内容滚动区：占满剩余高度，左右内边距，底部给底部导航留空间。
+   底栏实际占 14px + 68px = 82px，留 158px 再加 Home 指示条的安全区，
+   滚到底时最后一张卡不会被玻璃底栏压住。 */
 .today-scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 18px 16px 120px;
+  padding: 18px 16px calc(158px + env(safe-area-inset-bottom, 0px));
   scrollbar-width: none;
 }
 .today-scroll::-webkit-scrollbar { display: none; }

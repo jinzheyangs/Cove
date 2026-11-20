@@ -35,6 +35,9 @@ services:
       TRUST_PROXY_HEADERS: "true"
     volumes: !override
       - ./uploads:/app/uploads
+      # 前端产物单独挂载：改 UI 只要重新 build 前端、把 dist 传上来、重启 api，
+      # 不用重建整个镜像（小内存机器上重建一轮要传 500 MB）
+      - ./frontend/dist:/app/frontend/dist:ro
     ports: !override
       - "127.0.0.1:8000:8000"
     depends_on:

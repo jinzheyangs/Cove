@@ -386,7 +386,7 @@ input,textarea{ font:inherit; color:inherit; background:none; border:0; outline:
 
 /* tab：图标 + 底部小胶囊指示器，无文字（对齐参考稿的无标签导航） */
 .tabs{
-  position:absolute; bottom:14px; left:var(--pad); right:var(--pad); height:68px; z-index:3;
+  position:absolute; bottom:calc(14px + env(safe-area-inset-bottom, 0px)); left:var(--pad); right:var(--pad); height:68px; z-index:3;
   display:flex; align-items:center; padding:0 6px;
 }
 /* 全屏不透明背景视图（如日记页）：在组件内用 mask 挖洞，让 canvas 玻璃透出 */
@@ -529,9 +529,10 @@ body{ background:#EFEDF0; color:var(--ink); }
 }
 .screen{ background:#fff; }
 .hint{ color:rgba(25,20,25,.22); }
-/* 视图底部要让开渐隐区，否则最后一个 CTA 会被遮罩吃掉 */
-.view{ padding-bottom:196px; }
-html.sa .view{ padding-bottom:calc(196px + env(safe-area-inset-bottom, 0px)); }
+/* 视图底部要让开渐隐区，否则最后一个 CTA 会被遮罩吃掉。
+   安全区直接算进来：网页模式（非独立模式）没有 html.sa，但 iPhone 的
+   Home 指示条照样压在底栏上。env() 在没有安全区的设备返回兜底 0，桌面预览不受影响。 */
+.view{ padding-bottom:calc(196px + env(safe-area-inset-bottom, 0px)); }
 
 /* 顶栏 */
 .topscrim{
