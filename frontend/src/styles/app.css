@@ -26,6 +26,10 @@
 
 *{ box-sizing:border-box; }
 html,body{ height:100%; margin:0; }
+/* iOS Safari 的 text-size-adjust 默认是 auto：视口一变（横竖屏、工具栏收起、
+   页面缩放）它会自作主张放大正文字号，user-scalable=no 也压不住，
+   看起来就像"整体比例不对"。锁成 100%，字号才和设计稿保持一致。 */
+html{ -webkit-text-size-adjust:100%; text-size-adjust:100%; }
 body{
   background:#05070d; color:var(--ink);
   font-family: var(--sans);

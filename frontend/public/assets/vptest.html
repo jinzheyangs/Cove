@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#111">
+<title>Cove 视口探针</title>
+<style>
+  body{margin:0;padding:14px;background:#0d0d10;color:#e8e8ee;
+       font:13px/1.6 -apple-system,"SF Mono",ui-monospace,monospace}
+  h1{font-size:17px;margin:0 0 4px;font-weight:700}
+  .hint{color:#7b7b8a;font-size:12px;margin:0 0 12px}
+  .row{display:flex;gap:10px;justify-content:space-between;
+       border-bottom:1px solid #22222a;padding:7px 0}
+  .k{color:#7ea6d0;flex:0 0 auto}
+  .v{color:#ffd479;font-weight:600;text-align:right;word-break:break-all}
+  .ua{margin-top:12px;color:#6f6f7d;font-size:11px;word-break:break-all}
+</style>
+</head>
+<body>
+<h1>Cove 视口探针</h1>
+<p class="hint">截图这一页发给我，就能定位比例问题出在哪。</p>
+<div id="out"></div>
+<div class="ua" id="ua"></div>
+<script>
+(function () {
+  var probe = document.createElement('div');
+  probe.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0;' +
+    'padding-top:env(safe-area-inset-top,0px);' +
+    'padding-bottom:env(safe-area-inset-bottom,0px);visibility:hidden';
+  document.body.appendChild(probe);
+  var cs = getComputedStyle(probe);
+  var px = function (v) { return Math.round(parseFloat(v) || 0); };
+  var root = getComputedStyle(document.documentElement);
+  var vv = window.visualViewport;
+
+  var rows = [
+    ['窗口 innerWidth × innerHeight', window.innerWidth + ' × ' + window.innerHeight],
+    ['文档 clientWidth × clientHeight',
+      document.documentElement.clientWidth + ' × ' + document.documentElement.clientHeight],
+    ['可视视口 visualViewport',
+      vv ? Math.round(vv.width) + ' × ' + Math.round(vv.height) + '　scale ' + vv.scale.toFixed(2) : '不支持'],
+    ['设备像素比 DPR', String(window.devicePixelRatio)],
+    ['屏幕 screen.w × h', screen.width + ' × ' + screen.height],
+    ['安全区 top / bottom', px(cs.paddingTop) + 'px / ' + px(cs.paddingBottom) + 'px'],
+    ['--phone-w / --phone-h',
+      root.getPropertyValue('--phone-w').trim() + ' / ' + root.getPropertyValue('--phone-h').trim()],
+    ['实际手机壳 .phone 尺寸', (function () {
+      var el = document.querySelector('.phone');
+      if (!el) return '未找到 .phone';
+      var r = el.getBoundingClientRect();
+      return Math.round(r.width) + ' × ' + Math.round(r.height);
+    })()],
+    ['命中 max-width:560px', String(matchMedia('(max-width:560px)').matches)],
+    ['命中 max-height:900px', String(matchMedia('(max-height:900px)').matches)],
+    ['命中 max-height:860px', String(matchMedia('(max-height:860px)').matches)],
+    ['独立模式 standalone', String(matchMedia('(display-mode: standalone)').matches)],
+    ['文字缩放 text-size-adjust', root.getPropertyValue('-webkit-text-size-adjust').trim() || root.getPropertyValue('text-size-adjust').trim() || 'auto(未设置)']
+  ];
+
+  var out = document.getElementById('out');
+  rows.forEach(function (r) {
+    var d = document.createElement('div'); d.className = 'row';
+    var k = document.createElement('span'); k.className = 'k'; k.textContent = r[0];
+    var v = document.createElement('span'); v.className = 'v'; v.textContent = r[1];
+    d.appendChild(k); d.appendChild(v); out.appendChild(d);
+  });
+  document.getElementById('ua').textContent = navigator.userAgent;
+})();
+</script>
+</body>
+</html>

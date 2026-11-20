@@ -1,5 +1,5 @@
 <template>
-<section class="simta-chat" :class="{ on: active }" data-view="simta-chat">
+<section ref="chatRoot" class="simta-chat" :class="{ on: active }" data-view="simta-chat">
   <StatusBar />
 
   <!-- 顶部导航（iOS push 风格） -->
@@ -375,9 +375,38 @@ async function doCancelAction() {
   }
 }
 
+/* iOS 键盘：Safari 在输入框聚焦时会把可视视口整体上移，可这一页是 fixed 布局，
+   容器不跟着走，结果输入框被顶到屏幕中间、底下露出一大片底色，看着很别扭。
+   解法是让容器直接贴住 visualViewport：键盘弹起时高度缩到可视高度，同时跟随
+   offsetTop 的位移，输入框就始终停在键盘上沿。桌面预览（宽 > 560）不启用。 */
+const chatRoot = ref(null);
+const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+
+function syncViewport() {
+  const el = chatRoot.value;
+  if (!el || !vv) return;
+  const keyboard = window.innerHeight - vv.height;
+  if (window.innerWidth > 560 || keyboard < 40) {
+    el.style.top = '';
+    el.style.height = '';
+    el.style.bottom = '';
+    el.classList.remove('kb');
+    return;
+  }
+  el.style.top = Math.max(0, vv.offsetTop) + 'px';
+  el.style.height = vv.height + 'px';
+  el.style.bottom = 'auto';
+  el.classList.add('kb');
+}
+
 onMounted(async () => {
   loadState();
   window.addEventListener('cove:sync', onGlobalSync);
+  if (vv) {
+    vv.addEventListener('resize', syncViewport);
+    vv.addEventListener('scroll', syncViewport);
+    syncViewport();
+  }
 });
 
 /* 授权是两个人的事：TA 在自己的窗口里点了授权，这边必须能自己发现，
@@ -469,6 +498,10 @@ onBeforeUnmount(() => {
   stopPolling();
   saveMemory();
   window.removeEventListener('cove:sync', onGlobalSync);
+  if (vv) {
+    vv.removeEventListener('resize', syncViewport);
+    vv.removeEventListener('scroll', syncViewport);
+  }
 });
 </script>
 
@@ -807,6 +840,9 @@ onBeforeUnmount(() => {
   color: var(--ink, #2c121f);
 }
 .composer input::placeholder { color: rgba(44, 18, 31, .38); }
+
+/* 键盘弹起时下面那 26px 的呼吸位没有意义（Home 条已被键盘盖住），贴着键盘更自然 */
+.simta-chat.kb .composer { padding-bottom: 10px; }
 .send {
   flex: none;
   width: 44px;
