@@ -81,7 +81,16 @@ async def lifespan(app: FastAPI):
     await engine.dispose()
 
 
-app = FastAPI(title=settings.APP_NAME, version="0.1.0", lifespan=lifespan)
+app = FastAPI(
+    title=settings.APP_NAME,
+    version="0.1.0",
+    lifespan=lifespan,
+    # 生产不暴露接口文档。/docs 会把所有接口、参数、错误码摊给任何人看，
+    # 相当于把攻击面清单公开；本地开发留着方便调试。
+    docs_url=None if settings.ENV == "prod" else "/docs",
+    redoc_url=None if settings.ENV == "prod" else "/redoc",
+    openapi_url=None if settings.ENV == "prod" else "/openapi.json",
+)
 
 # 中间件顺序：后添加的在外层。
 # 实际执行顺序从外到内是 RequestContext -> RateLimit -> SecurityHeaders -> CORS。
