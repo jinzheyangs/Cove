@@ -107,6 +107,8 @@ services:
   jaeger:
     # 生产环境建议固定版本；latest 是为了兼容部分镜像站
     image: jaegertracing/all-in-one:latest
+    # 只用于本地链路追踪排查，生产默认不启动（跟着 monitoring profile 一起开关）
+    profiles: ["monitoring"]
     environment:
       - COLLECTOR_OTLP_ENABLED=true
     ports:
