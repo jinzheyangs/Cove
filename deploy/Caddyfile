@@ -17,6 +17,12 @@
 		reverse_proxy agent:8100
 	}
 
+	# 前端入口 HTML 每次都回源校验。发版后浏览器必须拿到新的 index.html，
+	# 否则会一直用缓存的旧入口，引用到已经不存在的旧 CSS/JS，
+	# 表现就是"明明改了、手机上看着一模一样"。
+	@entry path / /index.html
+	header @entry Cache-Control "no-store, must-revalidate"
+
 	# 其余全部交给业务后端：前端静态文件、业务接口、/docs
 	handle {
 		reverse_proxy api:8000
