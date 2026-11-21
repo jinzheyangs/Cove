@@ -48,6 +48,34 @@ if (window.visualViewport) {
 
 createApp(App).mount('#app');
 
+/* 临时诊断面板：带 ?diag=1 时在左上角显示真实数值，用来确认键盘弹起时
+   外壳到底有没有跟着缩。确认完可以删掉。 */
+if (new URLSearchParams(location.search).has('diag')) {
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;left:6px;top:6px;z-index:9999;' +
+    'background:rgba(0,0,0,.82);color:#5ef08a;font:11px/1.55 ui-monospace,monospace;' +
+    'padding:5px 7px;border-radius:6px;white-space:pre;pointer-events:none';
+  document.body.appendChild(box);
+  const paint = () => {
+    const vv = window.visualViewport;
+    const stage = document.querySelector('.stage');
+    const r = stage ? stage.getBoundingClientRect() : null;
+    box.textContent =
+      'v8 · innerH ' + window.innerHeight + '\n' +
+      'vv.h ' + (vv ? Math.round(vv.height) : 'n/a') +
+      '  vv.top ' + (vv ? Math.round(vv.offsetTop) : 'n/a') + '\n' +
+      'stage.y ' + (r ? Math.round(r.top) : '?') +
+      '  stage.h ' + (r ? Math.round(r.height) : '?') + '\n' +
+      'styleH ' + (stage ? (stage.style.height || '—') : '?');
+  };
+  paint();
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', paint);
+    window.visualViewport.addEventListener('scroll', paint);
+  }
+  setInterval(paint, 400);
+}
+
 /* 调试 / 自动化测试的把手：只有带 ?debug 时才挂到 window 上 */
 if (new URLSearchParams(location.search).has('debug')) window.__cove = engine;
 
