@@ -31,8 +31,12 @@ function syncStageToViewport() {
   const kb = window.innerHeight - vv.height;
   const shift = Math.max(0, vv.offsetTop) + Math.max(0, window.scrollY);
   if (kb < 40 && shift < 40) { reset(); return; }
+  const h = kb >= 40 ? vv.height : window.innerHeight - shift;
+  /* 键盘弹出/收起的过渡里，个别时刻会给出 0 或很小的值。
+     直接照着设会把外壳压成一条线（整页白屏），所以低于阈值就忽略这一帧。 */
+  if (!h || h < 160) return;
   stage.style.top = shift + 'px';
-  stage.style.height = (kb >= 40 ? vv.height : window.innerHeight - shift) + 'px';
+  stage.style.height = h + 'px';
   stage.style.bottom = 'auto';
 }
 
@@ -79,15 +83,30 @@ if (new URLSearchParams(location.search).has('diag')) {
 /* 调试 / 自动化测试的把手：只有带 ?debug 时才挂到 window 上 */
 if (new URLSearchParams(location.search).has('debug')) window.__cove = engine;
 
-/* Service Worker 只在真正的产品环境注册：
-   Capacitor 的 WebView 走本地协议，注册了反而会把旧包缓存住；
-   本地开发也不注册，否则 cache-first 会把 /src 下的旧模块一直喂给页面。 */
+/* Service Worker 暂不注册：/sw.js 走 SPA 兜底会返回 HTML，浏览器要求 JS MIME，
+   注册本来就会失败；而它一旦真的生效，发版缓存会让每次调试都失真。
+   等上线稳定后，单独给它开一条静态路由再启用。 */
 const isNative = !!window.Capacitor?.isNativePlatform?.();
 const isDevHost = location.hostname === 'localhost'
   || location.hostname === '127.0.0.1'
   || location.hostname === '[::1]';
-if (!import.meta.env.DEV && !isDevHost && 'serviceWorker' in navigator && location.protocol.startsWith('http') && !isNative) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
-  });
+// 暂时停用（见上方说明）。要重新启用时，先把 /sw.js 改成真正的静态响应，再放回这几行。
+// if (!import.meta.env.DEV && !isDevHost && 'serviceWorker' in navigator && location.protocol.startsWith('http') && !isNative) {
+//   window.addEventListener('load', () => {
+//     navigator.serviceWorker.register('sw.js').catch(() => {});
+//   });
+// }
+
+/* 自愈：如果这台设备上还留着早期注册成功的 Service Worker，它会一直喂旧包，
+   让页面停在老版本甚至白屏。这里主动注销它、并清掉它留下的缓存。
+   跑一次就够了，之后彻底干净。 */
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations()
+    .then(rs => Promise.all(rs.map(r => r.unregister())))
+    .catch(() => {});
+  if (window.caches) {
+    caches.keys()
+      .then(ks => Promise.all(ks.map(k => caches.delete(k))))
+      .catch(() => {});
+  }
 }
