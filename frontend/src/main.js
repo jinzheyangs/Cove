@@ -14,6 +14,38 @@ document.documentElement.classList.toggle('sa', !!IS_STANDALONE);
 
 initNative();
 
+/* iOS 键盘：输入框一聚焦，Safari 会把整页往上滚一段去"露出"它，外壳是 fixed 布局
+   不跟着走，结果底部导航跑到屏幕中间、下面空出一大片。
+   解法是让外壳直接贴住可视视口：键盘弹起时高度收到可视高度，同时跟上位移。
+   桌面预览（宽 > 560）不启用，那个带圆角的手机框保持原样。 */
+function syncStageToViewport() {
+  const vv = window.visualViewport;
+  const stage = document.querySelector('.stage');
+  if (!vv || !stage) return;
+  const reset = () => {
+    stage.style.top = '';
+    stage.style.height = '';
+    stage.style.bottom = '';
+  };
+  if (window.innerWidth > 560) { reset(); return; }
+  const kb = window.innerHeight - vv.height;
+  const shift = Math.max(0, vv.offsetTop) + Math.max(0, window.scrollY);
+  if (kb < 40 && shift < 40) { reset(); return; }
+  stage.style.top = shift + 'px';
+  stage.style.height = (kb >= 40 ? vv.height : window.innerHeight - shift) + 'px';
+  stage.style.bottom = 'auto';
+}
+
+if (window.visualViewport) {
+  const vv = window.visualViewport;
+  vv.addEventListener('resize', syncStageToViewport);
+  vv.addEventListener('scroll', syncStageToViewport);
+  window.addEventListener('scroll', syncStageToViewport);
+  window.addEventListener('orientationchange', () => setTimeout(syncStageToViewport, 250));
+  requestAnimationFrame(syncStageToViewport);
+  setTimeout(syncStageToViewport, 120);
+}
+
 createApp(App).mount('#app');
 
 /* 调试 / 自动化测试的把手：只有带 ?debug 时才挂到 window 上 */

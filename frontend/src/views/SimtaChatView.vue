@@ -375,32 +375,17 @@ async function doCancelAction() {
   }
 }
 
-/* iOS 键盘：Safari 在输入框聚焦时会把可视视口整体上移，可这一页是 fixed 布局，
-   容器不跟着走，结果输入框被顶到屏幕中间、底下露出一大片底色，看着很别扭。
-   解法是让容器直接贴住 visualViewport：键盘弹起时高度缩到可视高度，同时跟随
-   offsetTop 的位移，输入框就始终停在键盘上沿。桌面预览（宽 > 560）不启用。 */
+/* 键盘态只负责收一下底部留白（真正的位移由 main.js 里 .stage 跟随可视视口统一处理，
+   这里再设 top/height 会叠加两遍偏移） */
 const chatRoot = ref(null);
 const vv = typeof window !== 'undefined' ? window.visualViewport : null;
 
 function syncViewport() {
   const el = chatRoot.value;
-  if (!el || !vv || window.innerWidth > 560) return;
+  if (!el || !vv) return;
   const kb = window.innerHeight - vv.height;
   const shift = Math.max(0, vv.offsetTop);
-  /* iOS 有两种表现：有时它会缩小可视视口（kb 明显为正），
-     有时只是把整页往上滚一段去露出输入框（该缩小却没缩小、offsetTop 变正）。
-     两种都得接住，不然输入框就停在半截位置。 */
-  if (kb < 40 && shift < 40) {
-    el.style.top = '';
-    el.style.height = '';
-    el.style.bottom = '';
-    el.classList.remove('kb');
-    return;
-  }
-  el.style.top = shift + 'px';
-  el.style.height = (kb >= 40 ? vv.height : window.innerHeight - shift) + 'px';
-  el.style.bottom = 'auto';
-  el.classList.add('kb');
+  el.classList.toggle('kb', window.innerWidth <= 560 && (kb >= 40 || shift >= 40));
 }
 
 onMounted(async () => {
